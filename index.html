@@ -1,0 +1,3149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="description" content="GENOCIDE — a 2D pixel-art RPG about the monsters beneath Mount Solace, and what you choose to do to them.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0a14">
+<title>GENOCIDE</title>
+<style>
+/* ============================================================
+   GENOCIDE — stylesheet
+   Palette is grounded in the game's own fiction: a lightless
+   world kept alive by one artificial light (the Lumen). Gold
+   is that light. Teal is the living, growing things under it.
+   Rose is harm. Both gold and teal bleed toward ash and rust
+   as the player's kill-count rises (see applyRouteTint in JS).
+   ============================================================ */
+:root{
+  --ink:            #0d0a14;
+  --ink-soft:       #160f22;
+  --panel:          #1a1430;
+  --panel-edge:     #342856;
+  --panel-edge-lit: #4a3a78;
+  --text:           #e9e4f0;
+  --text-dim:       #a79bc2;
+  --gold:           #f2c14e;
+  --gold-dim:       #8a7239;
+  --teal:           #4fd3a3;
+  --teal-dim:       #2d7a60;
+  --rose:           #e8536b;
+  --rose-dim:       #8a3140;
+  --shadow-deep:    rgba(0,0,0,.55);
+  --font-main: 'Courier New', 'Consolas', monospace;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+*{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html,body{
+  margin:0; padding:0; width:100%; height:100%;
+  background:#000; color:var(--text);
+  font-family: var(--font-main);
+  overflow:hidden; overscroll-behavior:none;
+  touch-action:none; -webkit-user-select:none; user-select:none;
+}
+body{ display:flex; align-items:center; justify-content:center; }
+
+button{ font-family:inherit; color:inherit; cursor:pointer; }
+input[type=range]{ font-family:inherit; }
+
+#game-root{
+  position:relative; width:100%; height:100%;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:
+    radial-gradient(ellipse at 50% 30%, #1a1430 0%, #0d0a14 55%, #000 100%);
+}
+
+#canvas-wrap{
+  position:relative;
+  background:#000;
+  box-shadow: 0 0 0 2px var(--panel-edge), 0 0 40px var(--shadow-deep);
+  overflow:hidden;
+  flex:none;
+}
+/* bottom-dock sits BELOW canvas-wrap in normal flow (not overlapping it), so the
+   dialogue/battle panel never covers the game view, however small the canvas scales. */
+#bottom-dock{
+  flex:none; width:100%; max-width:100%;
+}
+#bottom-dock:empty, #bottom-dock.empty{ display:none; }
+#game-canvas{
+  display:block; width:100%; height:100%;
+  image-rendering:pixelated; image-rendering:crisp-edges;
+  background:#000;
+}
+
+/* subtle CRT vignette, purely decorative, cheap */
+#vignette{
+  position:absolute; inset:0; pointer-events:none; z-index:40;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.45) 100%);
+  mix-blend-mode:multiply;
+}
+#scanlines{
+  position:absolute; inset:0; pointer-events:none; z-index:41; opacity:.10;
+  background: repeating-linear-gradient(to bottom, #000 0px, #000 1px, transparent 1px, transparent 3px);
+}
+
+#fade-overlay{
+  position:absolute; inset:0; background:#000; opacity:0; pointer-events:none;
+  z-index:90; transition:opacity .35s linear;
+}
+#fade-overlay.active{ opacity:1; pointer-events:all; }
+
+.hidden{ display:none !important; }
+
+/* ---------- Title screen ---------- */
+#title-screen{
+  position:absolute; inset:0; z-index:50;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background: radial-gradient(ellipse at 50% 40%, #241a3a 0%, #0d0a14 70%);
+  gap: clamp(10px, 3vh, 26px);
+  padding: 20px;
+  text-align:center;
+}
+.title-logo{
+  font-size: clamp(38px, 11vw, 76px);
+  letter-spacing: clamp(6px, 2vw, 14px);
+  color: var(--gold);
+  text-shadow: 0 0 6px rgba(242,193,78,.5), 0 0 22px rgba(242,193,78,.35), 0 3px 0 #000;
+  font-weight:700;
+  animation: titleFlicker 5.5s infinite;
+}
+@keyframes titleFlicker{
+  0%,91%,100%{ opacity:1; }
+  92%{ opacity:.82; }
+  93%{ opacity:1; }
+  95%{ opacity:.7; }
+  96%{ opacity:1; }
+}
+.title-sub{
+  color: var(--text-dim); font-size: clamp(10px, 2.4vw, 14px);
+  letter-spacing:2px; max-width: 34em;
+}
+.title-menu{ display:flex; flex-direction:column; gap:10px; width:min(78vw, 320px); margin-top:10px; }
+.title-btn{
+  background:var(--panel); border:2px solid var(--panel-edge);
+  color:var(--text); padding:12px 18px; font-size:clamp(14px,3vw,17px);
+  letter-spacing:1px; text-align:left; position:relative;
+}
+.title-btn::before{ content:'▸'; color:var(--gold); opacity:0; margin-right:8px; transition:opacity .12s; }
+.title-btn:hover::before, .title-btn:focus-visible::before, .title-btn.kbd-sel::before{ opacity:1; }
+.title-btn:hover, .title-btn:focus-visible, .title-btn.kbd-sel{ border-color:var(--gold); background:var(--ink-soft); outline:none; }
+.title-btn:disabled{ opacity:.35; cursor:not-allowed; }
+.title-btn:disabled::before{ display:none; }
+.title-foot{ color:var(--text-dim); font-size:11px; position:absolute; bottom:calc(10px + var(--safe-b)); opacity:.6; }
+
+/* ---------- Generic overlay / modal screens ---------- */
+.overlay-screen{
+  position:absolute; inset:0; z-index:70;
+  background: rgba(8,6,14,.88);
+  display:flex; align-items:center; justify-content:center;
+  padding: calc(14px + var(--safe-t)) calc(14px + var(--safe-r)) calc(14px + var(--safe-b)) calc(14px + var(--safe-l));
+}
+.modal-panel{
+  background:var(--panel); border:2px solid var(--panel-edge);
+  width:min(92vw, 420px); max-height:92%; overflow-y:auto;
+  padding: 16px 18px 20px; box-shadow:0 10px 30px var(--shadow-deep);
+}
+.modal-title{
+  color:var(--gold); letter-spacing:3px; font-size:14px; margin:0 0 14px;
+  border-bottom:1px solid var(--panel-edge); padding-bottom:10px;
+}
+.modal-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:12px 0; font-size:14px; }
+.modal-row label{ color:var(--text-dim); flex:1; }
+.modal-row input[type=range]{ flex:1.4; accent-color:var(--gold); }
+.modal-btn-row{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+.modal-btn{
+  flex:1; min-width:100px; background:var(--ink-soft); border:2px solid var(--panel-edge);
+  color:var(--text); padding:10px 8px; font-size:13px; letter-spacing:1px;
+}
+.modal-btn:hover, .modal-btn:focus-visible{ border-color:var(--gold); outline:none; }
+.modal-btn.danger:hover{ border-color:var(--rose); color:var(--rose); }
+.modal-btn.primary{ border-color:var(--teal-dim); }
+.modal-btn.primary:hover{ border-color:var(--teal); color:var(--teal); }
+.modal-small{ font-size:11px; color:var(--text-dim); line-height:1.5; margin-top:4px;}
+.toggle-chip{ display:flex; gap:8px; flex-wrap:wrap; }
+.toggle-chip button{ background:var(--ink-soft); border:2px solid var(--panel-edge); padding:6px 10px; font-size:12px; color:var(--text-dim);}
+.toggle-chip button.on{ border-color:var(--teal); color:var(--teal); }
+
+/* ---------- HUD ---------- */
+#hud{
+  position:absolute; top:0; left:0; right:0; z-index:30;
+  padding: calc(8px + var(--safe-t)) calc(10px + var(--safe-r)) 0 calc(10px + var(--safe-l));
+  display:flex; justify-content:space-between; align-items:flex-start;
+  font-size: clamp(10px, 2.6vw, 13px);
+  pointer-events:none;
+}
+.hud-left{ background:rgba(13,10,20,.72); border:1px solid var(--panel-edge); padding:5px 10px; }
+.hud-name{ color:var(--gold); letter-spacing:1px; }
+.hud-hpwrap{ display:flex; align-items:center; gap:6px; margin-top:3px; }
+.hud-hpbar-bg{ width:84px; height:8px; background:#2a2240; border:1px solid #000; }
+.hud-hpbar-fill{ height:100%; background:var(--teal); transition:width .25s; }
+.hud-hptext{ color:var(--text-dim); font-size:.9em; white-space:nowrap; }
+.hud-right{ display:flex; gap:6px; }
+.hud-iconbtn{
+  pointer-events:all; background:rgba(13,10,20,.72); border:1px solid var(--panel-edge);
+  color:var(--text); width:30px; height:30px; display:flex; align-items:center; justify-content:center; font-size:15px;
+}
+
+/* ---------- Dialogue box (lives in #bottom-dock, below the canvas, never over it) ---------- */
+#dialogue-box{
+  padding: 8px calc(10px + var(--safe-r)) calc(8px + var(--safe-b)) calc(10px + var(--safe-l));
+}
+#dialogue-box.hidden{ display:none !important; }
+.dlg-panel{
+  background:var(--panel); border:2px solid var(--panel-edge-lit);
+  box-shadow: inset 0 0 0 1px #000, 0 -4px 18px var(--shadow-deep);
+  padding:10px 12px; display:flex; gap:10px; align-items:flex-start;
+  min-height: 74px;
+}
+.dlg-portrait-wrap{
+  flex:none; width:48px; height:48px; background:var(--ink); border:1px solid var(--panel-edge);
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+}
+.dlg-portrait-wrap canvas{ image-rendering:pixelated; width:100%; height:100%; }
+.dlg-body{ flex:1; min-width:0; }
+.dlg-name{ color:var(--gold); font-size:clamp(11px,2.6vw,13px); letter-spacing:1px; margin-bottom:3px; }
+.dlg-text{
+  color:var(--text); font-size:clamp(13px,3.1vw,16px); line-height:1.42;
+  white-space:pre-wrap; min-height: 2.9em;
+}
+.dlg-hint{ text-align:right; font-size:11px; color:var(--text-dim); margin-top:4px; animation:blinkHint 1.1s infinite; }
+@keyframes blinkHint{ 0%,100%{opacity:.35;} 50%{opacity:1;} }
+#dialogue-box.tappable{ cursor:pointer; }
+.dlg-choices{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.dlg-choice-btn{
+  background:var(--ink-soft); border:2px solid var(--panel-edge); color:var(--text);
+  padding:8px 10px; font-size:13px; text-align:left;
+}
+.dlg-choice-btn.kbd-sel, .dlg-choice-btn:hover{ border-color:var(--gold); }
+
+/* ---------- Battle UI (also in #bottom-dock; the dodge arena itself is drawn on the
+   canvas above, in the space the canvas now has because this panel lives below it) ---------- */
+#battle-ui{
+  background:var(--panel); border:2px solid var(--panel-edge-lit);
+  box-shadow: inset 0 0 0 1px #000, 0 -4px 18px var(--shadow-deep);
+  padding: 8px calc(10px + var(--safe-r)) calc(8px + var(--safe-b)) calc(10px + var(--safe-l));
+}
+.battle-enemy-row{ display:flex; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+.battle-enemy-name{ color:var(--text-dim); font-size:12px; }
+.battle-menu-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.battle-menu-btn{
+  padding:12px 2px; text-align:center; font-size:clamp(12px,3vw,15px); letter-spacing:1px;
+  border:2px solid var(--panel-edge); background:var(--ink-soft);
+}
+.battle-menu-btn[data-k="fight"]{ color:var(--rose); }
+.battle-menu-btn[data-k="act"]{ color:var(--teal); }
+.battle-menu-btn[data-k="item"]{ color:var(--gold); }
+.battle-menu-btn[data-k="mercy"]{ color:#cfc8ff; }
+.battle-menu-btn.kbd-sel, .battle-menu-btn:hover{ border-color:currentColor; background:var(--ink); }
+.battle-sub-list{ display:flex; flex-direction:column; gap:5px; max-height:30vh; overflow-y:auto; }
+.battle-sub-item{
+  background:var(--ink-soft); border:2px solid var(--panel-edge); color:var(--text);
+  padding:9px 10px; font-size:13px; text-align:left; display:flex; justify-content:space-between; gap:8px;
+}
+.battle-sub-item.kbd-sel, .battle-sub-item:hover{ border-color:var(--gold); }
+.battle-sub-item small{ color:var(--text-dim); }
+.battle-msg{ color:var(--text); font-size:clamp(13px,3vw,15px); min-height:3.1em; white-space:pre-wrap; line-height:1.4; }
+.battle-topstats{ display:flex; gap:14px; font-size:12px; color:var(--text-dim); margin-bottom:4px; }
+.battle-topstats b{ color:var(--teal); }
+
+/* ---------- Touch controls (viewport-fixed, independent of canvas scale) ---------- */
+#touch-controls{
+  position:fixed; inset:0; z-index:200; pointer-events:none;
+}
+#touch-controls button{ pointer-events:all; }
+#dpad{
+  position:absolute; left:calc(14px + var(--safe-l)); bottom:calc(16px + var(--safe-b));
+  width:128px; height:128px;
+}
+.dpad-btn{
+  position:absolute; width:44px; height:44px; background:rgba(26,20,48,.78);
+  border:2px solid var(--panel-edge-lit); color:var(--text); font-size:17px;
+  display:flex; align-items:center; justify-content:center; touch-action:none;
+}
+.dpad-btn:active, .dpad-btn.pressed{ background:rgba(242,193,78,.28); border-color:var(--gold); }
+#dpad-up{ left:42px; top:0; } #dpad-down{ left:42px; top:84px; }
+#dpad-left{ left:0; top:42px; } #dpad-right{ left:84px; top:42px; }
+#dpad-center{ left:42px; top:42px; width:44px; height:44px; background:rgba(13,10,20,.5); border-color:var(--panel-edge); }
+
+#action-buttons{
+  position:absolute; right:calc(16px + var(--safe-r)); bottom:calc(20px + var(--safe-b));
+  width:124px; height:92px;
+}
+.action-btn{
+  position:absolute; width:54px; height:54px; border-radius:50%;
+  background:rgba(26,20,48,.78); border:2px solid var(--panel-edge-lit); color:var(--text);
+  font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; touch-action:none;
+}
+.action-btn:active, .action-btn.pressed{ background:rgba(79,211,163,.28); border-color:var(--teal); }
+#btn-a{ right:0; bottom:30px; border-color:var(--teal-dim); color:var(--teal); }
+#btn-b{ right:62px; bottom:0; border-color:var(--rose-dim); color:var(--rose); }
+
+#btn-pause{
+  position:absolute; top:calc(10px + var(--safe-t)); right:calc(10px + var(--safe-r));
+  width:34px; height:34px; background:rgba(26,20,48,.78); border:1px solid var(--panel-edge-lit);
+  color:var(--text); font-size:15px; pointer-events:all; z-index:201;
+}
+
+@media (max-width: 420px){
+  #dpad{ width:112px; height:112px; } .dpad-btn{ width:38px; height:38px; }
+  #dpad-up{left:37px;} #dpad-down{left:37px; top:74px;} #dpad-left{top:37px;} #dpad-right{left:74px; top:37px;}
+  #dpad-center{left:37px; top:37px; width:38px; height:38px;}
+  #action-buttons{ width:108px; height:82px; } .action-btn{ width:46px; height:46px; }
+  #btn-a{ bottom:26px; } #btn-b{ right:54px; }
+}
+@media (max-height: 380px){
+  #dpad, #action-buttons{ transform:scale(.82); transform-origin:bottom; }
+}
+
+/* ---------- Loading ---------- */
+#boot-msg{ position:absolute; inset:0; z-index:500; background:#000; color:var(--text-dim);
+  display:flex; align-items:center; justify-content:center; font-size:13px; letter-spacing:2px; }
+
+/* ---------- Small helpers ---------- */
+.flex-col{ display:flex; flex-direction:column; }
+.grow{ flex:1; }
+.sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+::-webkit-scrollbar{ width:8px; } ::-webkit-scrollbar-thumb{ background:var(--panel-edge-lit); }
+</style>
+</head>
+<body>
+
+<div id="game-root">
+  <div id="canvas-wrap">
+    <canvas id="game-canvas" width="480" height="270" aria-label="GENOCIDE game view"></canvas>
+
+    <div id="hud" class="hidden">
+      <div class="hud-left">
+        <div class="hud-name" id="hud-name">—</div>
+        <div class="hud-hpwrap">
+          <div class="hud-hpbar-bg"><div class="hud-hpbar-fill" id="hud-hpfill" style="width:100%"></div></div>
+          <div class="hud-hptext" id="hud-hptext">20/20</div>
+        </div>
+      </div>
+      <div class="hud-right">
+        <button class="hud-iconbtn" id="hud-inv-btn" title="Inventory">🎒</button>
+      </div>
+    </div>
+
+  </div><!-- /canvas-wrap -->
+
+  <div id="bottom-dock">
+    <div id="battle-ui" class="hidden">
+      <div class="battle-topstats">
+        <span>HP <b id="battle-hp">20/20</b></span>
+        <span id="battle-enemy-hp-wrap"></span>
+      </div>
+      <div class="battle-msg" id="battle-msg"></div>
+      <div id="battle-menu-wrap">
+        <div class="battle-menu-grid" id="battle-menu-grid">
+          <button class="battle-menu-btn" data-k="fight">FIGHT</button>
+          <button class="battle-menu-btn" data-k="act">ACT</button>
+          <button class="battle-menu-btn" data-k="item">ITEM</button>
+          <button class="battle-menu-btn" data-k="mercy">MERCY</button>
+        </div>
+        <div class="battle-sub-list hidden" id="battle-sub-list"></div>
+      </div>
+    </div>
+
+    <div id="dialogue-box" class="hidden">
+      <div class="dlg-panel" id="dlg-panel">
+        <div class="dlg-portrait-wrap"><canvas id="dlg-portrait" width="32" height="32"></canvas></div>
+        <div class="dlg-body">
+          <div class="dlg-name" id="dlg-name"></div>
+          <div class="dlg-text" id="dlg-text"></div>
+          <div class="dlg-choices hidden" id="dlg-choices"></div>
+          <div class="dlg-hint" id="dlg-hint">▼ tap or press Z</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /bottom-dock -->
+
+  <div id="title-screen" class="hidden">
+      <div class="title-logo">GENOCIDE</div>
+      <div class="title-sub">beneath Mount Solace, something still remembers you falling.</div>
+      <div class="title-menu">
+        <button class="title-btn" id="btn-newgame">New Game</button>
+        <button class="title-btn" id="btn-continue">Continue</button>
+        <button class="title-btn" id="btn-settings">Settings</button>
+      </div>
+      <div class="title-foot">v1.0 · a game about mercy, built for a phone screen</div>
+    </div>
+
+    <div id="pause-menu" class="overlay-screen hidden">
+      <div class="modal-panel">
+        <div class="modal-title">PAUSED</div>
+        <div class="modal-btn-row" style="flex-direction:column;">
+          <button class="modal-btn primary" id="btn-resume">Resume</button>
+          <button class="modal-btn" id="btn-save">Save Game</button>
+          <button class="modal-btn" id="btn-pause-settings">Settings</button>
+          <button class="modal-btn danger" id="btn-quit-title">Return to Title</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-menu" class="overlay-screen hidden">
+      <div class="modal-panel">
+        <div class="modal-title">SETTINGS</div>
+        <div class="modal-row"><label for="vol-music">Music volume</label><input type="range" id="vol-music" min="0" max="100" value="55"></div>
+        <div class="modal-row"><label for="vol-sfx">Sound effects</label><input type="range" id="vol-sfx" min="0" max="100" value="70"></div>
+        <div class="modal-row"><label>Mute all</label>
+          <div class="toggle-chip"><button id="btn-mute-toggle">OFF</button></div>
+        </div>
+        <div class="modal-row"><label for="txt-speed">Text speed</label><input type="range" id="txt-speed" min="1" max="3" value="2" step="1"></div>
+        <div class="modal-small">Audio is generated live in your browser (no sound files). If your browser blocks audio, the game still plays fine — tap once anywhere to allow sound.</div>
+        <div class="modal-btn-row"><button class="modal-btn primary" id="btn-settings-close">Close</button></div>
+      </div>
+    </div>
+
+    <div id="inventory-menu" class="overlay-screen hidden">
+      <div class="modal-panel">
+        <div class="modal-title">INVENTORY</div>
+        <div id="inv-list" class="flex-col" style="gap:8px;"></div>
+        <div class="modal-small" id="inv-empty-msg">Nothing here yet.</div>
+        <div class="modal-btn-row"><button class="modal-btn primary" id="btn-inv-close">Close</button></div>
+      </div>
+    </div>
+
+    <div id="confirm-dialog" class="overlay-screen hidden">
+      <div class="modal-panel">
+        <div class="modal-title" id="confirm-title">ARE YOU SURE?</div>
+        <div class="modal-small" id="confirm-body" style="font-size:13px;color:var(--text);"></div>
+        <div class="modal-btn-row">
+          <button class="modal-btn danger" id="btn-confirm-yes">Yes</button>
+          <button class="modal-btn primary" id="btn-confirm-no">No</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="ending-screen" class="overlay-screen hidden">
+      <div class="modal-panel" style="width:min(94vw,520px);">
+        <div class="modal-title" id="ending-title">— END —</div>
+        <div id="ending-body" style="font-size:14px; line-height:1.7; white-space:pre-wrap;"></div>
+        <div class="modal-btn-row"><button class="modal-btn primary" id="btn-ending-title">Return to Title</button></div>
+      </div>
+    </div>
+
+  <div id="vignette"></div>
+  <div id="scanlines"></div>
+  <div id="fade-overlay"></div>
+  <div id="boot-msg">LOADING…</div>
+
+  <div id="touch-controls">
+    <div id="dpad">
+      <button class="dpad-btn" id="dpad-up">▲</button>
+      <button class="dpad-btn" id="dpad-down">▼</button>
+      <button class="dpad-btn" id="dpad-left">◀</button>
+      <button class="dpad-btn" id="dpad-right">▶</button>
+      <div class="dpad-btn" id="dpad-center" style="pointer-events:none;"></div>
+    </div>
+    <div id="action-buttons">
+      <button class="action-btn" id="btn-a">A</button>
+      <button class="action-btn" id="btn-b">B</button>
+    </div>
+    <button id="btn-pause" title="Pause">II</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   GENOCIDE — main script
+   Single-file, vanilla JS, Canvas2D + Web Audio. No external
+   assets, no network calls, no build step.
+   Sections (search for these tags to navigate):
+   §UTIL  §AUDIO  §INPUT  §SAVE  §SPRITES  §DATA-ITEMS
+   §DATA-DIALOGUE  §DATA-ROOMS  §DATA-ENEMIES  §STATE
+   §OVERWORLD  §PUZZLES  §DIALOGUEBOX  §BATTLE  §ENDINGS
+   §UI-SCREENS  §LOOP  §BOOT
+   ============================================================ */
+
+/* ============================================================
+   §UTIL
+   ============================================================ */
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function randRange(a,b){ return a+Math.random()*(b-a); }
+function randInt(a,b){ return Math.floor(randRange(a,b+1)); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function dist(x1,y1,x2,y2){ const dx=x2-x1, dy=y2-y1; return Math.sqrt(dx*dx+dy*dy); }
+function aabb(ax,ay,aw,ah,bx,by,bw,bh){ return ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by; }
+function circleRect(cx,cy,cr,rx,ry,rw,rh){
+  const nx = clamp(cx, rx, rx+rw), ny = clamp(cy, ry, ry+rh);
+  return dist(cx,cy,nx,ny) < cr;
+}
+function fmtTime(sec){
+  sec=Math.floor(sec); const m=Math.floor(sec/60), s=sec%60;
+  return m+':'+(s<10?'0':'')+s;
+}
+// draws a compact ascii-grid sprite: rows of chars, each char key in palette -> css color, '.' = transparent
+function drawGrid(ctx, rows, palette, x, y, px){
+  for(let r=0;r<rows.length;r++){
+    const row = rows[r];
+    for(let c=0;c<row.length;c++){
+      const ch = row[c];
+      if(ch==='.') continue;
+      const color = palette[ch];
+      if(!color) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(x+c*px), Math.round(y+r*px), px+0.5, px+0.5);
+    }
+  }
+}
+function pixelPanel(ctx,x,y,w,h,fill,edge){
+  ctx.fillStyle = edge; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle = fill; ctx.fillRect(x+2,y+2,w-4,h-4);
+}
+
+/* ============================================================
+   §AUDIO  (Web Audio API — everything generated, nothing loaded)
+   ============================================================ */
+const Audio2 = (function(){
+  let ctx=null, master=null, musicGain=null, sfxGain=null;
+  let musicVol=0.55, sfxVol=0.70, muted=false;
+
+  function ensureCtx(){
+    if(ctx) return true;
+    try{
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return false;
+      ctx = new AC();
+      master = ctx.createGain(); master.gain.value = muted?0:1; master.connect(ctx.destination);
+      musicGain = ctx.createGain(); musicGain.gain.value = musicVol; musicGain.connect(master);
+      sfxGain = ctx.createGain(); sfxGain.gain.value = sfxVol; sfxGain.connect(master);
+      return true;
+    }catch(e){ return false; }
+  }
+  function unlock(){
+    if(!ensureCtx()) return;
+    if(ctx.state==='suspended'){ ctx.resume().catch(function(){}); }
+  }
+  function setMusicVol(v){ musicVol=v; if(musicGain && ctx) musicGain.gain.setTargetAtTime(v, ctx.currentTime, .05); }
+  function setSfxVol(v){ sfxVol=v; if(sfxGain && ctx) sfxGain.gain.setTargetAtTime(v, ctx.currentTime, .05); }
+  function setMuted(m){ muted=m; if(master && ctx) master.gain.setTargetAtTime(m?0:1, ctx.currentTime, .05); }
+
+  function _playTone(t0, freq, dur, type, vol, gainNode){
+    if(!ensureCtx()) return;
+    try{
+      const osc=ctx.createOscillator(), g=ctx.createGain();
+      osc.type = type||'square';
+      osc.frequency.setValueAtTime(Math.max(20,freq), t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.001,(vol==null?0.5:vol)), t0+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+      osc.connect(g); g.connect(gainNode||sfxGain);
+      osc.start(t0); osc.stop(t0+dur+0.04);
+    }catch(e){}
+  }
+  function _playNoise(t0, dur, vol, gainNode){
+    if(!ensureCtx()) return;
+    try{
+      const n=Math.max(1,Math.floor(ctx.sampleRate*dur));
+      const buf=ctx.createBuffer(1,n,ctx.sampleRate), d=buf.getChannelData(0);
+      for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+      const src=ctx.createBufferSource(); src.buffer=buf;
+      const g=ctx.createGain();
+      g.gain.setValueAtTime(Math.max(0.001,(vol==null?0.3:vol)), t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+      src.connect(g); g.connect(gainNode||sfxGain); src.start(t0);
+    }catch(e){}
+  }
+  function tone(freq,dur,type,vol,delay,gainNode){ if(!ensureCtx())return; _playTone(ctx.currentTime+(delay||0),freq,dur,type,vol,gainNode); }
+  function noiseBurst(dur,vol,delay,gainNode){ if(!ensureCtx())return; _playNoise(ctx.currentTime+(delay||0),dur,vol,gainNode); }
+
+  const SFX = {
+    blip:function(pitchMod){ tone(170+(pitchMod||0)+Math.random()*70, 0.045, 'square', 0.16); },
+    move:function(){ tone(90,0.03,'square',0.05); },
+    select:function(){ tone(520,0.06,'square',0.18); tone(780,0.07,'square',0.14,0.045); },
+    confirm:function(){ tone(660,0.09,'triangle',0.22); },
+    cancel:function(){ tone(220,0.08,'square',0.18); },
+    hurt:function(){ noiseBurst(0.16,0.32); tone(110,0.18,'sawtooth',0.18); },
+    hit:function(){ tone(85,0.09,'square',0.26); noiseBurst(0.06,0.22); },
+    heal:function(){ tone(520,0.12,'sine',0.2); tone(780,0.14,'sine',0.18,0.08); tone(1040,0.2,'sine',0.16,0.17); },
+    spare:function(){ tone(660,0.1,'sine',0.18); tone(880,0.14,'sine',0.16,0.1); tone(1180,0.26,'sine',0.15,0.22); },
+    menuMove:function(){ tone(360,0.035,'square',0.13); },
+    doorOpen:function(){ tone(190,0.28,'sawtooth',0.14); tone(250,0.28,'sawtooth',0.11,0.05); },
+    pickup:function(){ tone(760,0.07,'square',0.19); tone(1020,0.1,'square',0.17,0.06); },
+    save:function(){ tone(440,0.09,'sine',0.18); tone(660,0.09,'sine',0.16,0.09); tone(880,0.18,'sine',0.16,0.18); },
+    danger:function(){ tone(140,0.22,'sawtooth',0.2); },
+    puzzle:function(){ tone(400,0.08,'triangle',0.18); tone(500,0.08,'triangle',0.16,0.08); tone(600,0.12,'triangle',0.16,0.16); },
+    smash:function(){ noiseBurst(0.22,0.4); tone(70,0.2,'square',0.2); },
+    switchFlip:function(){ tone(300,0.06,'square',0.16); tone(450,0.08,'square',0.14,0.05); },
+    levelUp:function(){ tone(440,0.1,'triangle',0.2); tone(550,0.1,'triangle',0.18,0.1); tone(660,0.1,'triangle',0.18,0.2); tone(880,0.3,'triangle',0.2,0.3); }
+  };
+
+  // --- procedural music: look-ahead scheduler over small generated patterns ---
+  function buildScale(root, semis){ return semis.map(function(s){ return root*Math.pow(2,s/12); }); }
+  const MINOR  = [0,3,5,7,8,10,12,15,17,19];
+  const DORIAN = [0,2,3,7,9,10,12,14,15,19];
+  const HARMIN = [0,2,3,5,7,8,11,12,14,15];
+  const OPEN5  = [0,5,7,12,14,19,24,12,7,5];
+
+  function makeTrack(opts){
+    const scale = opts.scale;
+    return {
+      id: opts.id, stepDur: opts.stepDur,
+      step: function(i, t){
+        if(opts.lead){
+          const li = opts.lead[i % opts.lead.length];
+          if(li!=null) _playTone(t, scale[li]*(opts.leadOct||1), opts.stepDur*(opts.leadSustain||0.82), opts.leadType||'square', (opts.leadVol==null?0.15:opts.leadVol), musicGain);
+        }
+        if(opts.bass){
+          const bi = opts.bass[i % opts.bass.length];
+          if(bi!=null) _playTone(t, scale[bi]*(opts.bassOct||0.5), opts.stepDur*(opts.bassSustain||0.92), opts.bassType||'triangle', (opts.bassVol==null?0.13:opts.bassVol), musicGain);
+        }
+        if(opts.perc){
+          const p = opts.perc[i % opts.perc.length];
+          if(p) _playNoise(t, 0.04, 0.07, musicGain);
+        }
+      }
+    };
+  }
+  // hand-written eerie generator for the darkest moments (no fixed melody — drifting detuned drone + sparse stabs)
+  function makeDroneTrack(id, rootFreq, stepDur, intensity){
+    return {
+      id:id, stepDur: stepDur,
+      step: function(i,t){
+        if(i % 8 === 0){
+          _playTone(t, rootFreq, stepDur*7.5, 'sawtooth', 0.05+0.02*intensity, musicGain);
+          _playTone(t, rootFreq*1.005, stepDur*7.5, 'sawtooth', 0.045+0.02*intensity, musicGain);
+        }
+        if(i % 8 === 5 && Math.random()<0.55){
+          _playTone(t, rootFreq*pick([2,2.37,1.5,2.84]), stepDur*1.6, 'sine', 0.07*intensity, musicGain);
+        }
+        if(i % 16 === 11 && Math.random()<0.4+0.3*intensity){
+          _playNoise(t, 0.3, 0.05+0.05*intensity, musicGain);
+        }
+      }
+    };
+  }
+
+  const TRACKS = {
+    title: makeTrack({ id:'title', stepDur:0.42, scale:buildScale(220,MINOR),
+      lead:[0,null,3,null,5,null,3,null, 2,null,0,null,null,null,null,null],
+      bass:[0,null,null,null,5,null,null,null], leadType:'triangle', bassType:'sine', leadVol:0.14, bassVol:0.12 }),
+    area1: makeTrack({ id:'area1', stepDur:0.38, scale:buildScale(260,DORIAN),
+      lead:[0,null,2,null,4,null,2,null,0,null,null,null,5,4,2,null], leadType:'sine', leadVol:0.13,
+      bass:[0,null,null,null,null,null,null,null], bassType:'sine', bassVol:0.1 }),
+    area2: makeTrack({ id:'area2', stepDur:0.46, scale:buildScale(196,MINOR),
+      lead:[0,null,null,3,null,2,null,null,5,null,null,3,null,2,null,null], leadType:'triangle', leadVol:0.14,
+      bass:[0,null,null,null,4,null,null,null], bassType:'triangle', bassVol:0.13 }),
+    area3: makeTrack({ id:'area3', stepDur:0.33, scale:buildScale(233,DORIAN),
+      lead:[0,2,null,3,2,null,0,null, null,5,4,null,2,null,null,0], leadType:'square', leadVol:0.1,
+      bass:[0,null,2,null], bassType:'square', bassVol:0.09, perc:[1,0,0,1,0,0,1,0] }),
+    area4: makeTrack({ id:'area4', stepDur:0.28, scale:buildScale(174,HARMIN),
+      lead:[null,null,0,null,null,null,6,null,null,null,4,null,null,null,0,null], leadType:'sawtooth', leadVol:0.1,
+      bass:[0,0,null,0,0,0,null,0], bassType:'square', bassVol:0.15, perc:[0,0,1,0,0,0,1,0] }),
+    area5_warm: makeTrack({ id:'area5_warm', stepDur:0.4, scale:buildScale(262,OPEN5),
+      lead:[0,null,2,4,null,5,4,null,2,null,0,null,null,null,null,null], leadType:'triangle', leadVol:0.15,
+      bass:[0,null,null,null,2,null,null,null], bassType:'sine', bassVol:0.12 }),
+    battle: makeTrack({ id:'battle', stepDur:0.165, scale:buildScale(220,MINOR),
+      lead:[0,3,5,3,0,3,5,7,0,3,5,3,2,3,0,null], leadType:'square', leadVol:0.13,
+      bass:[0,null,0,null,5,null,5,null], bassType:'square', bassVol:0.15, perc:[1,0,0,0,1,0,1,0,1,0,0,0,1,0,1,0] }),
+    battle_boss: makeTrack({ id:'battle_boss', stepDur:0.14, scale:buildScale(233,HARMIN),
+      lead:[0,5,3,5,0,5,6,5,2,5,3,5,0,5,6,7], leadType:'sawtooth', leadVol:0.12,
+      bass:[0,null,0,2,0,null,0,2], bassType:'square', bassVol:0.16, perc:[1,0,1,0,1,0,1,1] }),
+    ending_warm: makeTrack({ id:'ending_warm', stepDur:0.5, scale:buildScale(262,OPEN5),
+      lead:[0,null,2,null,4,null,5,null,4,null,2,null,0,null,null,null], leadType:'sine', leadVol:0.17,
+      bass:[0,null,null,null,2,null,null,null], bassType:'sine', bassVol:0.13 })
+  };
+  const droneGenocide = makeDroneTrack('area5_dark', 69.3, 0.5, 0.65);
+  const droneEnding   = makeDroneTrack('ending_dark', 55.0, 0.6, 0.9);
+  TRACKS.area5_dark = droneGenocide;
+  TRACKS.ending_dark = droneEnding;
+
+  let scheduler=null, nextNoteTime=0, trackDef=null, stepIndex=0;
+  function stopMusic(){ if(scheduler){ clearInterval(scheduler); scheduler=null; } trackDef=null; }
+  function startMusic(trackId){
+    if(!ensureCtx()) return;
+    const def = TRACKS[trackId];
+    if(!def) return;
+    if(trackDef && trackDef.id===def.id) return; // already playing
+    stopMusic();
+    trackDef = def; stepIndex=0; nextNoteTime = ctx.currentTime + 0.05;
+    scheduler = setInterval(scheduleAhead, 110);
+    scheduleAhead();
+  }
+  function scheduleAhead(){
+    if(!trackDef || !ctx) return;
+    const lookAhead=0.85;
+    while(nextNoteTime < ctx.currentTime + lookAhead){
+      trackDef.step(stepIndex, nextNoteTime);
+      stepIndex++; nextNoteTime += trackDef.stepDur;
+    }
+  }
+
+  return {
+    ensureCtx:ensureCtx, unlock:unlock, setMusicVol:setMusicVol, setSfxVol:setSfxVol, setMuted:setMuted,
+    SFX:SFX, startMusic:startMusic, stopMusic:stopMusic,
+    get musicVol(){return musicVol;}, get sfxVol(){return sfxVol;}, get muted(){return muted;},
+    get currentTrackId(){return trackDef?trackDef.id:null;}
+  };
+})();
+
+/* ============================================================
+   §INPUT
+   ============================================================ */
+const Input = (function(){
+  const held = {left:false,right:false,up:false,down:false};
+  const edge = {confirm:false,cancel:false,menu:false,navUp:false,navDown:false,navLeft:false,navRight:false};
+  function fire(name){ edge[name]=true; }
+  function consume(name){ if(edge[name]){ edge[name]=false; return true; } return false; }
+  function peek(name){ return !!edge[name]; }
+
+  function onKeyDown(e){
+    Audio2.unlock();
+    switch(e.key){
+      case 'ArrowUp': case 'w': case 'W': if(!held.up) fire('navUp'); held.up=true; e.preventDefault(); break;
+      case 'ArrowDown': case 's': case 'S': if(!held.down) fire('navDown'); held.down=true; e.preventDefault(); break;
+      case 'ArrowLeft': case 'a': case 'A': if(!held.left) fire('navLeft'); held.left=true; e.preventDefault(); break;
+      case 'ArrowRight': case 'd': case 'D': if(!held.right) fire('navRight'); held.right=true; e.preventDefault(); break;
+      case 'z': case 'Z': case 'Enter': fire('confirm'); e.preventDefault(); break;
+      case ' ': fire('confirm'); e.preventDefault(); break;
+      case 'x': case 'X': fire('cancel'); e.preventDefault(); break;
+      case 'Escape': fire('menu'); e.preventDefault(); break;
+      case 'p': case 'P': fire('menu'); break;
+    }
+  }
+  function onKeyUp(e){
+    switch(e.key){
+      case 'ArrowUp': case 'w': case 'W': held.up=false; break;
+      case 'ArrowDown': case 's': case 'S': held.down=false; break;
+      case 'ArrowLeft': case 'a': case 'A': held.left=false; break;
+      case 'ArrowRight': case 'd': case 'D': held.right=false; break;
+    }
+  }
+  function bindHoldButton(el, dir){
+    function down(e){ e.preventDefault(); Audio2.unlock(); held[dir]=true; el.classList.add('pressed'); if(dir==='up') fire('navUp'); if(dir==='down') fire('navDown'); if(dir==='left') fire('navLeft'); if(dir==='right') fire('navRight'); }
+    function up(e){ if(e)e.preventDefault(); held[dir]=false; el.classList.remove('pressed'); }
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+    el.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  }
+  function bindTapButton(el, edgeName){
+    function down(e){ e.preventDefault(); Audio2.unlock(); fire(edgeName); el.classList.add('pressed'); }
+    function up(e){ if(e)e.preventDefault(); el.classList.remove('pressed'); }
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+    el.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+  }
+  function init(){
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    bindHoldButton(document.getElementById('dpad-up'),'up');
+    bindHoldButton(document.getElementById('dpad-down'),'down');
+    bindHoldButton(document.getElementById('dpad-left'),'left');
+    bindHoldButton(document.getElementById('dpad-right'),'right');
+    bindTapButton(document.getElementById('btn-a'),'confirm');
+    bindTapButton(document.getElementById('btn-b'),'cancel');
+    bindTapButton(document.getElementById('btn-pause'),'menu');
+    document.body.addEventListener('pointerdown', function(){ Audio2.unlock(); }, {once:false});
+  }
+  function clearAllEdges(){ for(const k in edge) edge[k]=false; }
+  return { held:held, consume:consume, peek:peek, init:init, clearAllEdges:clearAllEdges, fire:fire };
+})();
+
+/* ============================================================
+   §SAVE
+   ============================================================ */
+const SaveMgr = (function(){
+  const KEY = 'genocide_save_v1';
+  const SETTINGS_KEY = 'genocide_settings_v1';
+  let memFallback=null, settingsMemFallback=null;
+  let hasLS = false;
+  try{ const k='__genocide_test__'; localStorage.setItem(k,'1'); localStorage.removeItem(k); hasLS=true; }catch(e){ hasLS=false; }
+
+  function save(data){
+    const json=JSON.stringify(data);
+    if(hasLS){ try{ localStorage.setItem(KEY,json); return true; }catch(e){ memFallback=json; return false; } }
+    memFallback=json; return false;
+  }
+  function load(){
+    let json=null;
+    if(hasLS){ try{ json=localStorage.getItem(KEY); }catch(e){ json=memFallback; } }
+    else json=memFallback;
+    if(!json) return null;
+    try{ return JSON.parse(json); }catch(e){ return null; }
+  }
+  function hasSave(){
+    if(hasLS){ try{ return !!localStorage.getItem(KEY); }catch(e){ return !!memFallback; } }
+    return !!memFallback;
+  }
+  function clearSave(){ if(hasLS){ try{ localStorage.removeItem(KEY); }catch(e){} } memFallback=null; }
+  function saveSettings(s){
+    const json=JSON.stringify(s);
+    if(hasLS){ try{ localStorage.setItem(SETTINGS_KEY,json); return; }catch(e){} }
+    settingsMemFallback=json;
+  }
+  function loadSettings(){
+    let json=null;
+    if(hasLS){ try{ json=localStorage.getItem(SETTINGS_KEY); }catch(e){ json=settingsMemFallback; } }
+    else json=settingsMemFallback;
+    if(!json) return null;
+    try{ return JSON.parse(json); }catch(e){ return null; }
+  }
+  return { save:save, load:load, hasSave:hasSave, clearSave:clearSave, saveSettings:saveSettings, loadSettings:loadSettings, get persistent(){return hasLS;} };
+})();
+
+/* ============================================================
+   §SPRITES — every visual in the game is drawn with these.
+   Primitives are rect-based on purpose: crisp, pixel-true edges
+   at any canvas scale (arcs/gradients would blur on upscale).
+   ============================================================ */
+function px(ctx,x,y,w,h,color){ ctx.fillStyle=color; ctx.fillRect(Math.round(x),Math.round(y),Math.max(1,Math.round(w)),Math.max(1,Math.round(h))); }
+function pxCircle(ctx,cx,cy,r,color){
+  ctx.fillStyle=color;
+  for(let yy=-r; yy<=r; yy++){
+    const xw = Math.round(Math.sqrt(Math.max(0,r*r-yy*yy)));
+    if(xw>0) ctx.fillRect(Math.round(cx-xw), Math.round(cy+yy), xw*2, 1);
+  }
+}
+function pxSpike(ctx,cx,topY,bottomY,baseW,color){
+  const h=Math.max(1,bottomY-topY);
+  ctx.fillStyle=color;
+  for(let yy=0; yy<=h; yy++){
+    const w=Math.max(1,Math.round(baseW*(1-yy/h)));
+    ctx.fillRect(Math.round(cx-w/2), Math.round(topY+yy), w, 1);
+  }
+}
+function glow(ctx,x,y,r,color,alpha){
+  try{
+    const g = ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0, hexA(color, alpha==null?0.55:alpha));
+    g.addColorStop(1, hexA(color,0));
+    ctx.fillStyle=g; ctx.fillRect(x-r,y-r,r*2,r*2);
+  }catch(e){}
+}
+function hexA(hex, a){
+  const h = hex.replace('#','');
+  const r=parseInt(h.substring(0,2),16), g=parseInt(h.substring(2,4),16), b=parseInt(h.substring(4,6),16);
+  return 'rgba('+r+','+g+','+b+','+a+')';
+}
+function blink(t, offset){ const p=(t+(offset||0))%3.6; return p>3.42; }
+function bob(t, speed, amp){ return Math.sin(t*speed)*amp; }
+
+function drawHeart(ctx,x,y,scale,color){
+  const rows = ['.XX.XX.','XXXXXXX','XXXXXXX','.XXXXX.','..XXX..','...X...'];
+  drawGrid(ctx, rows, {X:color||'#e8536b'}, x-3.5*scale, y-3*scale, scale);
+}
+function drawItemIcon(ctx,x,y,scale,kind){
+  if(kind==='heal'){
+    drawGrid(ctx, ['.XXXX.','XXXXXX','XXYYXX','XXYYXX','XXXXXX','.XXXX.'], {X:'#8a5a3a',Y:'#f2c14e'}, x-3*scale,y-3*scale,scale);
+  } else if(kind==='keyitem'){
+    drawGrid(ctx, ['..X...','.XYX..','XYYYX.','.XYX..','..X...','......'], {X:'#4fd3a3',Y:'#bdf2e0'}, x-3*scale,y-3*scale,scale);
+  } else if(kind==='photo'){
+    drawGrid(ctx, ['XXXXXX','XYYYYX','XYYYYX','XYYYYX','XYYYYX','XXXXXX'], {X:'#cbb98a',Y:'#efe6cf'}, x-3*scale,y-3*scale,scale);
+  } else {
+    drawGrid(ctx, ['.XX.','XYYX','XYYX','.XX.'], {X:'#8a7239',Y:'#f2c14e'}, x-2*scale,y-2*scale,scale);
+  }
+}
+function drawCrystal(ctx,cx,cy,size,color,t){
+  glow(ctx, cx, cy, size*3.2, color, 0.35+0.08*Math.sin((t||0)*2));
+  pxSpike(ctx, cx, cy-size, cy, size*0.9, color);
+  ctx.save(); ctx.translate(cx, cy*2);
+  ctx.scale(1,-1);
+  pxSpike(ctx, cx, cy, cy+size*0.8, size*0.7, hexA(color,0.85).startsWith('rgba')?color:color);
+  ctx.restore();
+}
+
+/* ---- player ---- */
+function drawPlayerSprite(ctx,cx,feetY,t,facing,moving,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*18)%2===0;
+  const skin = flash?'#ffffff':'#e9c9a0';
+  const shirt = flash?'#ffffff':'#4fd3a3';
+  const shirtDk = flash?'#dddddd':'#2d7a60';
+  const hair = flash?'#ffffff':'#4a3222';
+  const walk = moving ? Math.sin(t*11) : 0;
+  const legL = 2+Math.max(0,walk)*2, legR = 2+Math.max(0,-walk)*2;
+  px(ctx,cx-5,feetY-legL,4,legL,shirtDk);
+  px(ctx,cx+1,feetY-legR,4,legR,shirtDk);
+  px(ctx,cx-6,feetY-16,12,10,shirt);
+  px(ctx,cx-6,feetY-16,2,10,shirtDk);
+  px(ctx,cx-7,feetY-15,3,6,skin);
+  px(ctx,cx+4,feetY-15,3,6,skin);
+  pxCircle(ctx,cx,feetY-20,5,skin);
+  px(ctx,cx-5,feetY-24,10,4,hair);
+  px(ctx,cx-5,feetY-21,2,2,hair);
+  px(ctx,cx+3,feetY-21,2,2,hair);
+  if(!blink(t,0)){
+    px(ctx,cx-3,feetY-21,2,1,'#2a2030');
+  } else {
+    const ex = facing==='left'?-1:(facing==='right'?1:0);
+    px(ctx,cx-3+ex,feetY-21,1,2,'#2a2030');
+  }
+  if(!blink(t,0.2)){ px(ctx,cx+1,feetY-21,2,1,'#2a2030'); }
+  else { const ex = facing==='left'?-1:(facing==='right'?1:0); px(ctx,cx+1+ex,feetY-21,1,2,'#2a2030'); }
+}
+
+/* ---- Mote: a small lumenmoth, pale and hopeful ---- */
+function drawMoteSprite(ctx,cx,feetY,t,mood){
+  const fy = feetY - 10 + bob(t,3,2);
+  glow(ctx,cx,fy-2,16,'#bdeccb',0.4);
+  const wingUp = Math.sin(t*9)*3;
+  px(ctx,cx-9,fy-6+wingUp,7,5,'#d9f2e0');
+  px(ctx,cx+2,fy-6-wingUp,7,5,'#d9f2e0');
+  pxCircle(ctx,cx,fy,5,'#f4f0d8');
+  px(ctx,cx-2,fy-1,1,2,mood==='sad'?'#6a8a7a':'#3a5a4a');
+  px(ctx,cx+1,fy-1,1,2,mood==='sad'?'#6a8a7a':'#3a5a4a');
+  px(ctx,cx-1,fy+6,1,3,'#cbb98a');
+  px(ctx,cx-4,fy-7,1,2,'#cbb98a');
+  px(ctx,cx+3,fy-7,1,2,'#cbb98a');
+}
+
+/* ---- Garrow: shell-backed guardian, bulky and still ---- */
+function drawGarrowSprite(ctx,cx,feetY,t,mood){
+  const sway = bob(t,1.6,1);
+  px(ctx,cx-8,feetY-4,5,4,'#3a4a3a');
+  px(ctx,cx+3,feetY-4,5,4,'#3a4a3a');
+  pxCircle(ctx,cx,feetY-14+sway,13,'#5a7a52');
+  pxCircle(ctx,cx,feetY-14+sway,10,'#6f9465');
+  px(ctx,cx-2,feetY-16+sway,1,1,'#4a6a44'); px(ctx,cx+3,feetY-12+sway,1,1,'#4a6a44'); px(ctx,cx-5,feetY-10+sway,1,1,'#4a6a44');
+  pxCircle(ctx,cx+10,feetY-12+sway,6,'#cbb892');
+  if(!blink(t,0)) px(ctx,cx+11,feetY-13+sway,2,1,'#2a2030'); else px(ctx,cx+12,feetY-13+sway,1,2,'#2a2030');
+  px(ctx,cx+8,feetY-17+sway,5,2, mood==='angry'?'#8a3140':'#9a8362');
+}
+
+/* ---- Jibb: small round failed comedian ---- */
+function drawJibbSprite(ctx,cx,feetY,t,mood){
+  const bb = bob(t,5,1.4);
+  pxCircle(ctx,cx,feetY-10+bb,9,'#c99bd6');
+  px(ctx,cx-9,feetY-10+bb,2,5,'#a874b8');
+  px(ctx,cx+7,feetY-10+bb,2,5,'#a874b8');
+  if(!blink(t,0)){ px(ctx,cx-4,feetY-12+bb,2,2,'#2a2030'); px(ctx,cx+2,feetY-12+bb,2,2,'#2a2030'); }
+  else { px(ctx,cx-4,feetY-11+bb,2,1,'#2a2030'); px(ctx,cx+2,feetY-11+bb,2,1,'#2a2030'); }
+  if(mood==='sad'){ px(ctx,cx-3,feetY-6+bb,6,1,'#5a2030'); px(ctx,cx-4,feetY-5+bb,1,1,'#5a2030'); px(ctx,cx+3,feetY-5+bb,1,1,'#5a2030'); }
+  else { px(ctx,cx-3,feetY-6+bb,6,2,'#5a2030'); px(ctx,cx-4,feetY-7+bb,1,1,'#5a2030'); px(ctx,cx+3,feetY-7+bb,1,1,'#5a2030'); }
+  px(ctx,cx-1,feetY-20+bb,2,3,'#e8536b');
+  pxCircle(ctx,cx,feetY-21+bb,2,'#f2c14e');
+}
+
+/* ---- Rask: tall, angular, scarred warrior ---- */
+function drawRaskSprite(ctx,cx,feetY,t,mood){
+  px(ctx,cx-4,feetY-8,3,8,'#4a4252');
+  px(ctx,cx+1,feetY-8,3,8,'#4a4252');
+  px(ctx,cx-7,feetY-22,14,14,'#6a6278');
+  px(ctx,cx-7,feetY-22,2,14,'#4a4258');
+  px(ctx,cx-5,feetY-28,10,7,'#c9a082');
+  pxSpike(ctx,cx-4,feetY-32,feetY-27,3,'#2a2432');
+  pxSpike(ctx,cx+4,feetY-32,feetY-27,3,'#2a2432');
+  px(ctx,cx-4,feetY-25,2,1,'#2a2030');
+  px(ctx,cx+2,feetY-25,2,1,'#2a2030');
+  px(ctx,cx+4,feetY-29,1,7,'#8a3140');
+  if(mood!=='gentle'){ px(ctx,cx+9,feetY-24,3,16,'#9a9aa8'); px(ctx,cx+8,feetY-26,5,3,'#c9c9d4'); }
+}
+
+/* ---- Hesper: thin, clinical scientist ---- */
+function drawHesperSprite(ctx,cx,feetY,t,mood){
+  px(ctx,cx-3,feetY-8,2,8,'#5a5248');
+  px(ctx,cx+1,feetY-8,2,8,'#5a5248');
+  px(ctx,cx-6,feetY-24,12,16,'#e8e4da');
+  px(ctx,cx-6,feetY-24,12,2,'#c9c2b2');
+  pxCircle(ctx,cx,feetY-28,5,'#b8a088');
+  px(ctx,cx-6,feetY-26,4,3,'#2a2430'); px(ctx,cx+2,feetY-26,4,3,'#2a2430');
+  px(ctx,cx-5,feetY-26,2,2,mood==='guilty'?'#6a7a8a':'#dfeeff');
+  px(ctx,cx+3,feetY-26,2,2,mood==='guilty'?'#6a7a8a':'#dfeeff');
+  px(ctx,cx-6,feetY-14,3,8,'#cfd6dc');
+}
+
+/* ---- Nettle: the flower. pale, watching, never quite still ---- */
+function drawNettleSprite(ctx,cx,feetY,t,mood){
+  const lean = bob(t,1.1,2.2);
+  glow(ctx,cx+lean,feetY-16,20,'#bcd7ea',0.22);
+  px(ctx,cx-1,feetY-10,2,10,'#6a8a72');
+  for(let i=0;i<6;i++){
+    const ang = (i/6)*Math.PI*2 + t*0.15;
+    const px_ = cx+lean+Math.cos(ang)*7, py_ = feetY-16+Math.sin(ang)*5;
+    pxCircle(ctx,px_,py_,3.4, mood==='dark' ? '#9aa2c9' : '#eaf2fa');
+  }
+  pxCircle(ctx,cx+lean,feetY-16,6, mood==='dark' ? '#7a84ad' : '#f5f9fc');
+  if(mood==='sly'){ px(ctx,cx+lean-3,feetY-17,2,1,'#2a2030'); px(ctx,cx+lean+1,feetY-17,2,1,'#2a2030'); px(ctx,cx+lean-2,feetY-14,4,1,'#2a2030'); }
+  else if(mood==='sad'){ px(ctx,cx+lean-3,feetY-17,1,2,'#2a2030'); px(ctx,cx+lean+2,feetY-17,1,2,'#2a2030'); px(ctx,cx+lean-2,feetY-13,4,1,'#2a2030'); }
+  else if(mood==='dark'){ px(ctx,cx+lean-3,feetY-18,2,3,'#1a1420'); px(ctx,cx+lean+1,feetY-18,2,3,'#1a1420'); px(ctx,cx+lean-2,feetY-14,4,1,'#1a1420'); }
+  else { px(ctx,cx+lean-3,feetY-17,1,2,'#2a2030'); px(ctx,cx+lean+2,feetY-17,1,2,'#2a2030'); px(ctx,cx+lean-2,feetY-14,4,1,'#2a2030'); }
+}
+
+/* ---- regular enemies ---- */
+function drawGlimmerbugSprite(ctx,cx,cy,t,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*18)%2===0;
+  const w = Math.sin(t*14)*2;
+  px(ctx,cx-6,cy-2+w,5,3, flash?'#fff':'#e8536b');
+  px(ctx,cx+1,cy-2-w,5,3, flash?'#fff':'#e8536b');
+  pxCircle(ctx,cx,cy,3, flash?'#fff':'#2a2030');
+  glow(ctx,cx,cy,8,'#e8536b',0.3);
+}
+function drawMosslingSprite(ctx,cx,feetY,t,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*18)%2===0;
+  const base = flash?'#fff':'#6f8a52';
+  pxCircle(ctx,cx,feetY-6,7,base);
+  px(ctx,cx-6,feetY-2,3,3,flash?'#fff':'#4a5a38');
+  px(ctx,cx+3,feetY-2,3,3,flash?'#fff':'#4a5a38');
+  px(ctx,cx-3,feetY-8,1,1,'#2a2030'); px(ctx,cx+2,feetY-8,1,1,'#2a2030');
+}
+function drawRustcapSprite(ctx,cx,feetY,t,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*18)%2===0;
+  px(ctx,cx-1,feetY-7,2,7, flash?'#fff':'#c9b89a');
+  pxCircle(ctx,cx,feetY-10,7, flash?'#fff':'#c9683a');
+  px(ctx,cx-3,feetY-9,1,1,'#2a1810'); px(ctx,cx+2,feetY-9,1,1,'#2a1810');
+}
+function drawBonepetalSprite(ctx,cx,feetY,t,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*18)%2===0;
+  const col = flash?'#fff':'#ded2bc';
+  px(ctx,cx-1,feetY-8,2,8,'#6a8a72');
+  for(let i=0;i<5;i++){
+    const ang=(i/5)*Math.PI*2+t*0.6;
+    pxSpike(ctx, cx+Math.cos(ang)*6, feetY-13+Math.sin(ang)*5-3, feetY-13+Math.sin(ang)*5+3, 3, col);
+  }
+  pxCircle(ctx,cx,feetY-13,4,col);
+  px(ctx,cx-2,feetY-14,1,1,'#2a2030'); px(ctx,cx+1,feetY-14,1,1,'#2a2030');
+}
+function drawSparkmiteSprite(ctx,cx,cy,t,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*18)%2===0;
+  const jx = Math.sin(t*23)*2, jy=Math.cos(t*19)*2;
+  pxCircle(ctx,cx+jx,cy+jy,4, flash?'#fff':'#dfe84e');
+  if(Math.sin(t*30)>0.3){
+    px(ctx,cx+jx-6,cy+jy-1,3,1,'#fff6a0'); px(ctx,cx+jx+4,cy+jy+2,3,1,'#fff6a0');
+  }
+  glow(ctx,cx+jx,cy+jy,10,'#dfe84e',0.3);
+}
+
+/* ---- Specimen: Hesper's failed experiment, patchwork and asymmetric ---- */
+function drawSpecimenSprite(ctx,cx,feetY,t,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*15)%2===0;
+  const twitch = Math.sin(t*17)>0.85 ? 1 : 0;
+  px(ctx,cx-9,feetY-6,6,6, flash?'#fff':'#7a8a6a');
+  px(ctx,cx+4,feetY-9,7,9, flash?'#fff':'#8a7a9a');
+  pxCircle(ctx,cx,feetY-18+twitch,9, flash?'#fff':'#9a9a8a');
+  px(ctx,cx-6,feetY-19,2,2,'#2a2030'); px(ctx,cx+1,feetY-21,3,2,'#2a2030');
+  px(ctx,cx-3,feetY-24,8,2, flash?'#fff':'#5a5a4a');
+}
+
+/* ---- Hollow Bloom: Nettle, transformed (genocide-route finale only) ---- */
+function drawHollowBloomSprite(ctx,cx,feetY,t,hurtT){
+  const flash = hurtT>0 && Math.floor(hurtT*14)%2===0;
+  const sway = bob(t,0.7,3);
+  glow(ctx,cx+sway,feetY-30,34,'#6a3a46',0.4);
+  px(ctx,cx-2,feetY-6,4,6, flash?'#fff':'#3a2a30');
+  for(let i=0;i<9;i++){
+    const ang=(i/9)*Math.PI*2+t*0.1;
+    const bx=cx+sway+Math.cos(ang)*16, by=feetY-30+Math.sin(ang)*11;
+    pxSpike(ctx,bx,by-5,by+5,4, flash?'#fff':'#5a4a5a');
+  }
+  pxCircle(ctx,cx+sway,feetY-30,11, flash?'#fff':'#8a7a90');
+  px(ctx,cx+sway-5,feetY-33,3,4,'#1a1420'); px(ctx,cx+sway+2,feetY-33,3,4,'#1a1420');
+  px(ctx,cx+sway-4,feetY-26,8,2,'#1a1420');
+  for(let i=0;i<4;i++){ px(ctx,cx+sway-14+i*9,feetY-24+((i%2)*6),1,1,'#e8536b'); }
+}
+
+/* ---- environment props ---- */
+function drawWallBlock(ctx,x,y,w,h,baseColor,edgeColor){
+  px(ctx,x,y,w,h,baseColor);
+  px(ctx,x,y,w,2,edgeColor);
+  px(ctx,x,y,2,h,edgeColor);
+}
+function drawMossPatch(ctx,x,y,seed){
+  for(let i=0;i<5;i++){
+    const ox=((seed*13+i*37)%17)-8, oy=((seed*7+i*23)%7)-3;
+    pxCircle(ctx,x+ox,y+oy,3+((seed+i)%2),'#2d7a60');
+  }
+}
+function drawRubble(ctx,x,y,seed){
+  for(let i=0;i<4;i++){
+    const ox=((seed*11+i*29)%20)-10, oy=((seed*5+i*13)%8)-4;
+    px(ctx,x+ox,y+oy,4+((seed+i)%3),3+((seed+i*2)%3),'#4a4252');
+  }
+}
+function drawSwitchProp(ctx,x,y,on){
+  px(ctx,x-5,y-3,10,6,'#342856');
+  px(ctx,x-2,y-2-(on?3:0),4,4, on?'#4fd3a3':'#8a3140');
+  if(on) glow(ctx,x,y-4,8,'#4fd3a3',0.4);
+}
+function drawPushBlock(ctx,x,y,size){
+  px(ctx,x,y,size,size,'#5a4a7a');
+  px(ctx,x+2,y+2,size-4,size-4,'#6f5c94');
+  px(ctx,x+4,y+4,3,3,'#4a3a68'); px(ctx,x+size-7,y+size-7,3,3,'#4a3a68');
+}
+function drawPlate(ctx,x,y,w,active){
+  px(ctx,x,y,w,4, active?'#4fd3a3':'#5a4a40');
+  if(active) glow(ctx,x+w/2,y+2,10,'#4fd3a3',0.3);
+}
+function drawGate(ctx,x,y,w,h,open){
+  if(open){ px(ctx,x,y,w,4,'#4a3a2a'); return; }
+  for(let i=0;i<w;i+=6){ px(ctx,x+i,y,3,h,'#3a3242'); }
+  px(ctx,x,y,w,3,'#241e34');
+}
+function drawMemorialStatue(ctx,x,feetY,broken){
+  if(broken){
+    drawRubble(ctx,x,feetY-6,9);
+    return;
+  }
+  px(ctx,x-7,feetY-4,14,4,'#6a6278');
+  px(ctx,x-5,feetY-20,10,16,'#8a82a0');
+  pxCircle(ctx,x,feetY-23,5,'#9a92ae');
+}
+function drawShopStand(ctx,x,feetY){
+  px(ctx,x-14,feetY-2,28,3,'#5a3a28');
+  px(ctx,x-14,feetY-16,3,16,'#4a2e1e'); px(ctx,x+11,feetY-16,3,16,'#4a2e1e');
+  px(ctx,x-16,feetY-20,34,6,'#8a3140');
+  px(ctx,x-16,feetY-20,34,2,'#a84a58');
+}
+function drawLabMachine(ctx,x,feetY,litIndex,t){
+  px(ctx,x-12,feetY-20,26,20,'#3a4048');
+  px(ctx,x-12,feetY-20,26,3,'#4a525c');
+  for(let i=0;i<3;i++){
+    const lit = i===litIndex;
+    px(ctx,x-8+i*8,feetY-14,5,5, lit?'#4fd3a3':'#20262c');
+    if(lit) glow(ctx,x-6+i*8,feetY-12,7,'#4fd3a3',0.4+0.1*Math.sin(t*4));
+  }
+}
+function drawSignpost(ctx,x,feetY){
+  px(ctx,x-1,feetY-14,2,14,'#4a3a2a');
+  px(ctx,x-7,feetY-20,14,8,'#6a5238');
+  px(ctx,x-7,feetY-20,14,2,'#8a6a48');
+}
+function drawWaterStrip(ctx,x,y,w,h,t){
+  px(ctx,x,y,w,h,'#17263a');
+  for(let i=0;i<w;i+=14){
+    const o = Math.sin(t*1.3+i)*2;
+    px(ctx,x+i+o,y+h*0.4,8,1,'#2a4560');
+  }
+}
+
+/* ============================================================
+   §DATA — dialogue script helpers
+   A "script" is an array of steps consumed by the DialogueBox:
+     L(spk,text)        -> show a line, wait for confirm
+     FN(fn)              -> run fn(state) silently, continue at once
+     CH(choices,onPick)  -> show buttons, onPick(id,state) may
+                             return MORE steps, spliced in next
+     BATTLE(enemyId)      -> close dialogue, start battle
+   ============================================================ */
+function L(spk,t){ return {spk:spk,t:t}; }
+function FN(fn){ return {fn:fn}; }
+function CH(choices,onPick){ return {choice:choices,onPick:onPick}; }
+function BATTLE(enemyId){ return {battleStart:enemyId}; }
+const DLG = {};
+
+/* ============================================================
+   §DATA-ITEMS
+   ============================================================ */
+const ITEMS = {
+  honeydew_bun:   { id:'honeydew_bun', name:'Honeydew Bun', desc:'Soft bread drizzled with cave-honey. Restores 10 HP.', heal:10, icon:'heal', price:12 },
+  glimmer_draught:{ id:'glimmer_draught', name:'Glimmer Draught', desc:'Bottled Lumen-light, faintly sweet. Restores 18 HP.', heal:18, icon:'heal', price:22 },
+  old_tea:        { id:'old_tea', name:'Lukewarm Root Tea', desc:'Bitter, but it helps. Restores 7 HP.', heal:7, icon:'heal', price:6 },
+  faded_photograph:{ id:'faded_photograph', name:'Faded Photograph', desc:"Jibb's old troupe, all seven, laughing at something out of frame.", heal:0, icon:'photo', keyItem:true },
+  cracked_photograph:{ id:'cracked_photograph', name:'Cracked Photograph', desc:"Half a photo. A shoulder, a sleeve, someone's laughing mouth. The rest is gone.", heal:0, icon:'photo', keyItem:true },
+  stale_letter:   { id:'stale_letter', name:'Unsent Letter', desc:'Found tucked behind a mossy crack. "...if you ever get this, I made it further than I thought I would."', heal:0, icon:'photo', keyItem:true },
+  lab_chip:       { id:'lab_chip', name:'Access Chip', desc:"Hums faintly near the lab door.", heal:0, icon:'keyitem', keyItem:true }
+};
+
+/* ============================================================
+   §DATA-DIALOGUE — Area 1 & 2 cast
+   ============================================================ */
+DLG.mote_intro = function(state){
+  if(state.flags.moteIntroDone){
+    return [ L('Mote',"Still here. Still glowing. Go on, I'll catch up.") ];
+  }
+  return [
+    L('Mote',"Oh! You're awake. And in one piece. Good."),
+    L('Mote',"I'm Mote. I watch this stretch of the Root, so the fallen ones don't wander into the switch-maze and starve."),
+    L('Mote',"That bug that jumped you — it wasn't cruel. It was scared, same as you probably were."),
+    L('Mote',"You don't have to fight everything down here. FIGHT ends things fast. ACT and MERCY end them kinder. Both get you through."),
+    L('Mote',"I think the Hollow can still be good. I know that's a strange thing for a bug with static for wings to believe. I believe it anyway."),
+    FN(function(s){ s.flags.moteIntroDone=true; s.flags.metMote=true; })
+  ];
+};
+DLG.mote_driftwood = function(state){
+  const f=state.flags;
+  if(f.garrowResolved==='spared'||f.garrowResolved==='talked'){
+    return [ L('Mote',"Garrow let you through? I've known him a long time. He's not made of stone, whatever that shell says.") ];
+  }
+  if(f.garrowResolved==='killed'){
+    return [ L('Mote',"..."), L('Mote',"Garrow's gone, isn't he."), L('Mote',"I don't know what to say to you right now.") ];
+  }
+  return [
+    L('Mote',"This is Driftwood Hold. Smaller than it used to be — half the houses are empty."),
+    L('Mote',"Garrow guards the passage ahead. He lost his kid, Briar, trying to leave through there, years back. He's not mean. He's just still waiting."),
+    L('Mote',"Be patient with him, if you can.")
+  ];
+};
+DLG.coda_shop = function(state){
+  return [
+    L('Coda',"Stand's open. Buns and tea, that's all I've got since the trade routes dried up."),
+    CH([{id:'bun',label:'Honeydew Bun — 12 glimmer'},{id:'tea',label:'Root Tea — 6 glimmer'},{id:'leave',label:'Maybe later'}], function(id,st){
+      if(id==='leave') return [ L('Coda',"Mind the Hold. It's quieter than it looks.") ];
+      const cost = id==='bun'?12:6, item = id==='bun'?'honeydew_bun':'old_tea';
+      if(st.gold<cost) return [ L('Coda',"That's more glimmer than you're carrying, friend.") ];
+      return [ FN(function(s){ s.gold-=cost; addItem(s,item); Audio2.SFX.pickup(); }), L('Coda',"There you are. Careful on the road.") ];
+    })
+  ];
+};
+DLG.sign_mural = function(state){
+  return [ L(null,"A worn carving, older than the room around it:"), L(null,'"Wake the right. Wake the left. Wake the one between."') ];
+};
+DLG.sign_lab_note = function(state){
+  return [ L(null,"A brittle note pinned beside the machines:"), L(null,'"Door sequence — Lamp B lit, then Lamp A, then Lamp C."') ];
+};
+DLG.hidden_letter = function(state){
+  if(state.flags.gotLetter) return [ L(null,"Just a mossy crack in the wall now.") ];
+  return [
+    L(null,"Tucked into a crack in the wall, a folded letter, soft with age."),
+    L(null,'"...if you ever get this, I made it further than I thought I would. Tell them I wasn\'t afraid. I was, actually. Tell them I went anyway."'),
+    FN(function(s){ s.flags.gotLetter=true; addItem(s,'stale_letter'); Audio2.SFX.pickup(); })
+  ];
+};
+
+/* ---- Garrow: non-battle wrapper (examine / post-resolution) ---- */
+DLG.garrow_gate = function(state){
+  const f=state.flags;
+  if(f.garrowResolved==='spared'||f.garrowResolved==='talked'){
+    return [ L('Garrow',"The gate's yours whenever you want it."), L('Garrow',"...Thank you for asking about him.") ];
+  }
+  if(f.garrowResolved==='killed'){
+    return [ L(null,"The shell lies empty by the gate. Someone will have to tell the Hold.") ];
+  }
+  return [
+    L('Garrow',"No further, child."),
+    L('Garrow',"This passage stays shut. I've made my peace with being the reason why."),
+    CH([{id:'fight',label:'[Fight]'},{id:'talk',label:'Try to talk to him'}], function(id,st){
+      if(id==='fight') return [ BATTLE('garrow') ];
+      return [ BATTLE('garrow') ]; // either choice opens the encounter; ACT options inside let you talk him down
+    })
+  ];
+};
+
+/* ============================================================
+   §DATA-ROOMS — Area 1: The Hollow Root
+   ============================================================ */
+const ROOMS = {};
+
+ROOMS.hr_landing = {
+  id:'hr_landing', area:'hollow_root',
+  bgKind:'root',
+  walls:[ {x:0,y:0,w:480,h:28},{x:0,y:230,w:480,h:40},{x:0,y:0,w:18,h:270},{x:462,y:0,w:18,h:270} ],
+  decor:[ {type:'moss',x:60,y:170,seed:3},{type:'moss',x:380,y:150,seed:9},{type:'crystal',x:240,y:130,size:14,color:'#f2c14e'} ],
+  npcs:[ {uid:'nettle_hr', x:120, y:190, sprite:'nettle', name:'Nettle', dialogueKey:'nettle_hr1', mood:'sly'} ],
+  enemies:[],
+  objects:[ {id:'sign_fall',type:'sign',x:300,y:200,dlg:'sign_fall'} ],
+  exits:[ {x:440,y:120,w:30,h:60, toRoom:'hr_corridor', toX:40, toY:150} ]
+};
+DLG.sign_fall = function(){ return [ L(null,"You remember falling. You don't remember landing. The moss, maybe, was kinder than the ground had any right to be.") ]; };
+DLG.nettle_hr1 = function(state){
+  if(state.flags.nettleHr1Done) return [ L('Nettle',"Go on. The Root doesn't bite. Not yet, anyway.") ];
+  return [
+    L('Nettle',"Oh — oh, a new one."),
+    L('Nettle',"Don't look so alarmed. I'm just a flower. Flowers are harmless. Everyone says so."),
+    L('Nettle',"You fell a long way to land on something so soft. Lucky. Or it's lucky for now, which is the only kind of lucky anybody really gets."),
+    L('Nettle',"I'll be around. I'm always around. It's not as though I can go anywhere."),
+    FN(function(s){ s.flags.nettleHr1Done=true; s.flags.metNettle=true; })
+  ];
+};
+
+ROOMS.hr_corridor = {
+  id:'hr_corridor', area:'hollow_root',
+  bgKind:'root',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[ {type:'moss',x:200,y:120,seed:5} ],
+  npcs:[],
+  enemies:[ {uid:'glimmerbug_tut', enemyId:'glimmerbug', x:260, y:160} ],
+  objects:[],
+  exits:[
+    {x:0,y:120,w:24,h:60, toRoom:'hr_landing', toX:420, toY:150},
+    {x:440,y:120,w:30,h:60, toRoom:'hr_switches', toX:40, toY:150}
+  ]
+};
+
+ROOMS.hr_switches = {
+  id:'hr_switches', area:'hollow_root',
+  bgKind:'root',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[ {type:'crystal',x:240,y:70,size:10,color:'#f2c14e'} ],
+  npcs:[ {uid:'mote_intro',x:360,y:190,sprite:'mote',name:'Mote',dialogueKey:'mote_intro'} ],
+  enemies:[],
+  objects:[
+    {id:'mural1',type:'sign',x:240,y:100,dlg:'sign_mural'},
+    {id:'sw_left',type:'switch',key:'left',x:160,y:190},
+    {id:'sw_center',type:'switch',key:'center',x:240,y:190},
+    {id:'sw_right',type:'switch',key:'right',x:320,y:190},
+    {id:'hidden_nook',type:'sign',x:60,y:190,dlg:'hidden_letter'}
+  ],
+  exits:[
+    {x:0,y:120,w:24,h:60, toRoom:'hr_corridor', toX:420, toY:150},
+    {x:440,y:120,w:30,h:60, toRoom:'dw_entrance', toX:40, toY:150, locked:true, lockFlag:'hrSwitchesSolved'}
+  ]
+};
+
+/* ============================================================
+   §DATA-ROOMS — Area 2: Driftwood Hold
+   ============================================================ */
+ROOMS.dw_entrance = {
+  id:'dw_entrance', area:'driftwood',
+  bgKind:'settlement',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[ {type:'plank',x:100,y:200},{type:'plank',x:340,y:200} ],
+  npcs:[
+    {uid:'coda', x:140, y:190, sprite:'coda_generic', name:'Coda', dialogueKey:'coda_shop', shop:true},
+    {uid:'mote_dw', x:380, y:195, sprite:'mote', name:'Mote', dialogueKey:'mote_driftwood'}
+  ],
+  enemies:[ {uid:'mossling_1', enemyId:'mossling', x:250, y:150} ],
+  objects:[],
+  exits:[
+    {x:440,y:120,w:30,h:60, toRoom:'dw_puzzle', toX:40, toY:150},
+    {x:0,y:120,w:24,h:60, toRoom:'hr_switches', toX:400, toY:150}
+  ]
+};
+DLG.coda_shop = DLG.coda_shop; // (defined above; kept for clarity of section)
+
+ROOMS.dw_puzzle = {
+  id:'dw_puzzle', area:'driftwood',
+  bgKind:'settlement',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[],
+  npcs:[],
+  enemies:[ {uid:'mossling_2', enemyId:'mossling', x:120, y:150} ],
+  objects:[
+    {id:'pushblock1', type:'pushblock', x:220, y:150, homeX:220, homeY:150},
+    {id:'plate1', type:'plate', x:340, y:190, w:28, activatesFlag:'dwBridgeLowered'}
+  ],
+  exits:[
+    {x:440,y:120,w:30,h:60, toRoom:'dw_gate', toX:40, toY:150, locked:true, lockFlag:'dwBridgeLowered'},
+    {x:0,y:120,w:24,h:60, toRoom:'dw_entrance', toX:400, toY:150}
+  ]
+};
+
+ROOMS.dw_gate = {
+  id:'dw_gate', area:'driftwood',
+  bgKind:'settlement',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270},{x:462,y:0,w:18,h:270} ],
+  decor:[ {type:'crystal',x:240,y:90,size:11,color:'#f2c14e'} ],
+  npcs:[ {uid:'garrow',x:280,y:180,sprite:'garrow',name:'Garrow',dialogueKey:'garrow_gate'} ],
+  enemies:[],
+  objects:[ {id:'gate1', type:'gate', x:400, y:100, w:40, h:110, openFlag:'garrowResolved'} ],
+  exits:[
+    {x:0,y:120,w:24,h:60, toRoom:'dw_puzzle', toX:400, toY:150},
+    {x:440,y:140,w:30,h:50, toRoom:'gw_entrance', toX:40, toY:150, locked:true, lockFlag:'garrowResolved'}
+  ]
+};
+
+/* ============================================================
+   §DATA-DIALOGUE / §DATA-ROOMS — Area 3: Glasswick Ruins
+   ============================================================ */
+DLG.tull_shop = function(state){
+  return [
+    L('Tull',"Welcome to what's left of the market. I'm the whole market now, far as I know."),
+    CH([{id:'draught',label:'Glimmer Draught — 22 glimmer'},{id:'bun',label:'Honeydew Bun — 12 glimmer'},{id:'leave',label:'Just looking'}], function(id,st){
+      if(id==='leave') return [ L('Tull',"Look all you like. Nothing here's going anywhere.") ];
+      const cost = id==='draught'?22:12, item = id==='draught'?'glimmer_draught':'honeydew_bun';
+      if(st.gold<cost) return [ L('Tull',"Come back when you've got the glimmer for it.") ];
+      return [ FN(function(s){ s.gold-=cost; addItem(s,item); Audio2.SFX.pickup(); }), L('Tull',"Pleasure. Mind the loose stones on your way out.") ];
+    })
+  ];
+};
+
+DLG.jibb = function(state){
+  const f=state.flags;
+  const dark = state.stats.kills >= 6 && f.metJibbOnce && !f.jibbResolved;
+  if(f.jibbResolved){
+    if(f.jibbResolved==='spared') return [ L('Jibb',"Still here. Still terrible at this. Thanks for not making me stop.") ];
+    return [];
+  }
+  if(dark){
+    return [
+      L('Jibb',"Hey. Hey, you're — you're still going, huh."),
+      L('Jibb',"I don't have a joke for this part. I never wrote one. Didn't think I'd need it."),
+      L('Jibb',"I'm not going to fight you. I never learned how. So I guess this is just — me, asking."),
+      CH([{id:'spare',label:'Walk away'},{id:'harm',label:'...'}], function(id,st){
+        if(id==='spare'){
+          return [ L('Jibb',"...Okay. Okay. Thank you."), FN(function(s){ s.flags.jibbResolved='spared'; Audio2.SFX.spare(); }) ];
+        }
+        return [ L(null,"..."), FN(function(s){ s.flags.jibbResolved='killed'; s.stats.kills++; Audio2.SFX.hurt(); }), L(null,"The stage stays empty after that. Nobody fixes the lights.") ];
+      })
+    ];
+  }
+  if(!f.metJibbOnce){
+    return [
+      L('Jibb',"Oh — a live one! Audience of one is still an audience. Sit anywhere. All the seats are equally broken."),
+      L('Jibb',"Okay, okay, I've been working on this one. So a rock falls into a cave — and nobody's there to hear it."),
+      L('Jibb',"...That's it. That's the whole bit. I've been polishing the ending for six years."),
+      L('Jibb',"Tough room. Tough room's fine. Tough room, I can work with."),
+      FN(function(s){ s.flags.metJibbOnce=true; })
+    ];
+  }
+  if(f.memorialResolved && !f.jibbStage2Done){
+    if(f.memorialBroken){
+      return [
+        L('Jibb',"You came back. Good. I, uh — I heard. About the statue, past the stalls."),
+        L('Jibb',"It's fine. It's just stone. I'm not — it's fine."),
+        L('Jibb',"It was for my troupe. Seven of us, once. That's all I've got to say about it today."),
+        FN(function(s){ s.flags.jibbStage2Done=true; })
+      ];
+    }
+    return [
+      L('Jibb',"You left the old statue standing. Most people just smash through — faster."),
+      L('Jibb',"That was for my troupe. Seven of us. I carved it myself, badly, which you can probably tell."),
+      L('Jibb',"Here. I've been carrying this too long anyway."),
+      FN(function(s){ addItem(s,'faded_photograph'); Audio2.SFX.pickup(); s.flags.jibbStage2Done=true; }),
+      L('Jibb',"That's all seven of us. Before the glimmer dried up and everyone scattered looking for brighter rooms. A couple of them... faded, before they found one.")
+    ];
+  }
+  if(f.knowsFading && !f.jibbStage3Done){
+    return [
+      L('Jibb',"You've been to the Labs. I can tell. You've got that look."),
+      L('Jibb',"Fading. That's the word for it, huh. All this time I just called it 'leaving' because it hurt less."),
+      L('Jibb',"Doesn't change the bit, though. Rock falls in a cave, nobody's there. Guess I finally get why I kept telling it."),
+      FN(function(s){ s.flags.jibbStage3Done=true; })
+    ];
+  }
+  return [ L('Jibb',"Same show, new audience. That's the dream, actually.") ];
+};
+
+DLG.memorial_examine = function(state){
+  const f=state.flags;
+  if(f.memorialBroken) return [ L(null,"Rubble, swept to the sides of the path.") ];
+  if(f.metJibbOnce) return [ L(null,"Jibb's memorial. You know that now."), memorialChoiceStep() ];
+  return [ L(null,"A statue, worn smooth. Small flowers carved at its base, long faded. You don't know whose it is."), memorialChoiceStep() ];
+};
+function memorialChoiceStep(){
+  return CH([{id:'smash',label:'Smash it'},{id:'leave',label:'Leave it standing'}], function(id,st){
+    if(id==='leave') return [ FN(function(s){ s.flags.memorialResolved=true; }), L(null,"You step back. There's another way around, if you're willing to walk it.") ];
+    return [
+      FN(function(s){ s.flags.memorialBroken=true; s.flags.memorialResolved=true; Audio2.SFX.smash(); }),
+      FN(function(s){ addItem(s,'cracked_photograph'); }),
+      L(null,"It comes apart easier than old stone should. Underneath, half a photograph, the rest crumbled to dust.")
+    ];
+  });
+}
+
+ROOMS.gw_entrance = {
+  id:'gw_entrance', area:'glasswick', bgKind:'ruins',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[ {type:'rubble',x:90,y:200,seed:4},{type:'rubble',x:360,y:160,seed:12} ],
+  npcs:[ {uid:'tull', x:400, y:190, sprite:'tull_generic', name:'Tull', dialogueKey:'tull_shop', shop:true} ],
+  enemies:[ {uid:'rustcap_1', enemyId:'rustcap', x:160, y:160} ],
+  objects:[],
+  exits:[
+    {x:440,y:120,w:30,h:60, toRoom:'gw_stage', toX:40, toY:150},
+    {x:0,y:140,w:24,h:50, toRoom:'dw_gate', toX:400, toY:160}
+  ]
+};
+
+ROOMS.gw_stage = {
+  id:'gw_stage', area:'glasswick', bgKind:'ruins',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[ {type:'rubble',x:420,y:200,seed:2} ],
+  npcs:[ {uid:'jibb',x:240,y:170,sprite:'jibb',name:'Jibb',dialogueKey:'jibb'} ],
+  enemies:[],
+  objects:[],
+  exits:[
+    {x:440,y:120,w:30,h:60, toRoom:'gw_memorial', toX:40, toY:150},
+    {x:0,y:120,w:24,h:60, toRoom:'gw_entrance', toX:400, toY:150}
+  ]
+};
+
+ROOMS.gw_memorial = {
+  id:'gw_memorial', area:'glasswick', bgKind:'ruins',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[],
+  npcs:[],
+  enemies:[],
+  objects:[ {id:'memorial1',type:'memorial',x:260,y:190} ],
+  exits:[
+    {x:0,y:120,w:24,h:60, toRoom:'gw_stage', toX:400, toY:150},
+    {x:440,y:60,w:30,h:50, toRoom:'gw_yard', toX:40, toY:150, locked:true, lockFlag:'memorialBroken'},
+    {x:440,y:170,w:30,h:50, toRoom:'gw_sidepath', toX:40, toY:150}
+  ]
+};
+
+ROOMS.gw_sidepath = {
+  id:'gw_sidepath', area:'glasswick', bgKind:'ruins',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[ {type:'rubble',x:240,y:180,seed:7} ],
+  npcs:[],
+  enemies:[ {uid:'bonepetal_1', enemyId:'bonepetal', x:240, y:150} ],
+  objects:[],
+  exits:[
+    {x:0,y:120,w:24,h:60, toRoom:'gw_memorial', toX:400, toY:190},
+    {x:440,y:120,w:30,h:60, toRoom:'gw_yard', toX:40, toY:150}
+  ]
+};
+
+DLG.rask_yard = function(state){
+  const f=state.flags;
+  if(f.raskResolved==='spared'||f.raskResolved==='talked') return [ L('Rask',"Still walking soft, I see. We'll find out if that holds.") ];
+  if(f.raskResolved==='killed') return [ L(null,"The training yard is empty. Nobody's sparring today.") ];
+  return [
+    L('Rask',"You're the one who's been talking its way through the Hollow instead of fighting its way through."),
+    L('Rask',"I train what's left of this place to hold a blade because mercy didn't save my brother. A tunnel did that. Mercy wasn't in the room."),
+    CH([{id:'fight',label:'[Fight]'},{id:'talk',label:'I\'m not here to fight you'}], function(id,st){
+      return [ BATTLE('rask') ];
+    })
+  ];
+};
+
+ROOMS.gw_yard = {
+  id:'gw_yard', area:'glasswick', bgKind:'ruins',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270},{x:462,y:0,w:18,h:270} ],
+  decor:[ {type:'rubble',x:80,y:200,seed:6} ],
+  npcs:[ {uid:'rask',x:260,y:180,sprite:'rask',name:'Rask',dialogueKey:'rask_yard'} ],
+  enemies:[],
+  objects:[],
+  exits:[
+    {x:0,y:60,w:24,h:50, toRoom:'gw_memorial', toX:400, toY:60},
+    {x:0,y:170,w:24,h:50, toRoom:'gw_sidepath', toX:400, toY:150},
+    {x:440,y:120,w:30,h:60, toRoom:'hl_entrance', toX:40, toY:150, locked:true, lockFlag:'raskResolved'}
+  ]
+};
+
+/* ---- generic minor NPCs (shopkeepers, background villagers) ---- */
+function drawVillagerSprite(ctx,cx,feetY,t,palette){
+  const pal = palette || {body:'#8a7aa0', trim:'#5a4a78', skin:'#cbb892'};
+  px(ctx,cx-3,feetY-8,6,8,pal.trim);
+  px(ctx,cx-6,feetY-22,12,15,pal.body);
+  pxCircle(ctx,cx,feetY-26,5,pal.skin);
+  px(ctx,cx-3,feetY-27,2,1,'#2a2030'); px(ctx,cx+1,feetY-27,2,1,'#2a2030');
+}
+function drawCodaSprite(ctx,cx,feetY,t){ drawVillagerSprite(ctx,cx,feetY,t,{body:'#5a8a7a',trim:'#2d5a4a',skin:'#d9c2a0'}); }
+function drawTullSprite(ctx,cx,feetY,t){ drawVillagerSprite(ctx,cx,feetY,t,{body:'#9a6a4a',trim:'#5a3a28',skin:'#cbb098'}); }
+
+/* ---- lamp puzzle prop: one bulb that cycles through three hues ---- */
+const LAMP_COLORS = ['#4fd3a3','#f2c14e','#e8536b'];
+function drawLampPost(ctx,x,feetY,colorIdx,t){
+  px(ctx,x-2,feetY-18,4,18,'#3a3648');
+  const c = LAMP_COLORS[colorIdx%3];
+  pxCircle(ctx,x,feetY-22,6,c);
+  glow(ctx,x,feetY-22,12,c,0.45+0.1*Math.sin(t*3));
+}
+
+/* ============================================================
+   §DATA-DIALOGUE / §DATA-ROOMS — Area 4: Hush Labs
+   ============================================================ */
+const LAB_TARGET = {left:1, mid:0, right:2}; // amber, teal, rose
+
+DLG.lab_sign = function(){
+  return [ L(null,"A brittle note, taped beside the lamps:"), L(null,'"Door responds to — near lamp: amber. middle lamp: green. far lamp: rose."') ];
+};
+DLG.lab_record = function(state){
+  if(state.flags.knowsWrenName) return [ L(null,"The same brittle file. You already know what it says.") ];
+  return [
+    L(null,"A brittle file, half-eaten by damp. A few lines survive:"),
+    L(null,'"Subject: Wren. Age: young. Status: dissolved — presumed merged with containment flora, Growth Chamber 3. [remainder illegible]"'),
+    FN(function(s){ s.flags.knowsWrenName=true; })
+  ];
+};
+
+DLG.hesper = function(state){
+  const f=state.flags;
+  const dark = state.stats.kills >= 6 && f.specimenResolved && !f.hesperResolved;
+  if(f.hesperResolved){
+    if(f.hesperResolved==='spared'||f.hesperResolved==='trusted') return [ L('Hesper',"...Thank you for not making me the last thing that happened in this room.") ];
+    return [];
+  }
+  if(!f.specimenResolved){
+    return [ L('Hesper',"I can't — not until you've dealt with what's guarding the inner door. I'm sorry. I am. Go on.") ];
+  }
+  if(dark){
+    return [
+      L('Hesper',"You didn't spare it. Of course you didn't."),
+      L('Hesper',"I built that door to keep people like you out, and I still failed. I'm tired of failing at the one thing that mattered."),
+      CH([{id:'spare',label:'Leave her be'},{id:'harm',label:'...'}], function(id,st){
+        if(id==='spare') return [ L('Hesper',"...Go, then. Before I change my mind about being grateful."), FN(function(s){ s.flags.hesperResolved='spared'; Audio2.SFX.spare(); }) ];
+        return [ L(null,"..."), FN(function(s){ s.flags.hesperResolved='killed'; s.stats.kills++; Audio2.SFX.hurt(); }), L(null,"Whatever she still owed the world, she doesn't owe it anymore.") ];
+      })
+    ];
+  }
+  if(f.specimenResolved==='spared' && !f.hesperLoreDone){
+    return [
+      L('Hesper',"You let it live. Nobody's done that. I've stopped being able to, myself, most days."),
+      L('Hesper',"I should tell you what it is. What I am, underneath 'scientist.'"),
+      L('Hesper',"The Lumen is dying. Has been longer than I've been alive. Decades ago, people more certain than me tried to graft its overflow into living volunteers — store the light in a person, so it couldn't be lost."),
+      L('Hesper',"It doesn't store. It unravels. We call it fading. The body stays, mostly. The thread holding a person together just comes loose, strand by strand, until there isn't enough left to call anyone."),
+      L('Hesper',"That thing behind you was one of my attempts to reverse it. I couldn't undo what grafting does, so I did the only kind thing left. I kept it safe instead of calling it finished."),
+      L('Hesper',"There was a child, in the very first trials, under the one who taught me. I don't know what became of her for certain. I have theories I can't prove and can't stop having."),
+      FN(function(s){ s.flags.hesperLoreDone=true; s.flags.knowsFading=true; s.flags.hesperResolved='trusted'; })
+    ];
+  }
+  if(f.specimenResolved==='killed' && !f.hesperLoreDone){
+    return [
+      L('Hesper',"You killed it. It never hurt anyone who didn't come looking for a fight."),
+      L('Hesper',"...I don't have the energy to hate you for it. I built a world where that made a kind of sense. That's on me too."),
+      L('Hesper',"You should at least understand what you ended. The Lumen is dying — decades of grafting experiments on volunteers, trying to store its light in people instead of losing it. It unravels instead. Fading, we call it."),
+      L('Hesper',"That was one of my attempts to reverse it. I kept it safe instead of calling it finished. Until now."),
+      FN(function(s){ s.flags.hesperLoreDone=true; s.flags.knowsFading=true; }),
+      L('Hesper',"Leave me with this a while. Please.")
+    ];
+  }
+  return [ L('Hesper',"The inner door stays shut behind me. I'd like to keep it that way, for both our sakes.") ];
+};
+
+ROOMS.hl_entrance = {
+  id:'hl_entrance', area:'hush_labs', bgKind:'lab',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[],
+  npcs:[],
+  enemies:[ {uid:'sparkmite_1', enemyId:'sparkmite', x:220, y:130} ],
+  objects:[
+    {id:'lab_sign1', type:'sign', x:150, y:190, dlg:'lab_sign'},
+    {id:'lamp_left', type:'lamp', key:'left', x:260, y:190},
+    {id:'lamp_mid', type:'lamp', key:'mid', x:320, y:190},
+    {id:'lamp_right', type:'lamp', key:'right', x:380, y:190}
+  ],
+  exits:[
+    {x:440,y:120,w:30,h:60, toRoom:'hl_inner', toX:40, toY:150, locked:true, lockFlag:'labDoorOpen'},
+    {x:0,y:140,w:24,h:50, toRoom:'gw_yard', toX:400, toY:160}
+  ]
+};
+
+ROOMS.hl_inner = {
+  id:'hl_inner', area:'hush_labs', bgKind:'lab',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270},{x:462,y:0,w:18,h:270} ],
+  decor:[ {type:'crystal',x:380,y:80,size:9,color:'#9ad6ff'} ],
+  npcs:[
+    {uid:'hesper', x:380, y:170, sprite:'hesper', name:'Hesper', dialogueKey:'hesper'}
+  ],
+  enemies:[ {uid:'specimen_1', enemyId:'specimen', x:200, y:170} ],
+  objects:[ {id:'lab_record1', type:'sign', x:120, y:190, dlg:'lab_record'} ],
+  exits:[
+    {x:0,y:120,w:24,h:60, toRoom:'hl_entrance', toX:400, toY:150},
+    {x:440,y:120,w:30,h:60, toRoom:'sp_ascent', toX:40, toY:150, locked:true, lockFlag:'specimenResolved'}
+  ]
+};
+
+/* ============================================================
+   §DATA-DIALOGUE / §DATA-ROOMS — Area 5: The Lumen Spire
+   ============================================================ */
+function classifyLean(state){
+  const k = state.stats.kills;
+  if(k===0 && state.stats.spares>=3) return 'pacifist';
+  if(k>=6) return 'genocide';
+  return 'neutral';
+}
+
+DLG.mote_spire_gate = function(state){
+  const f=state.flags;
+  if(f.moteGone) return [];
+  if(f.moteResolved){
+    return [ L('Mote', f.moteResolved==='spared' ? "I'm still glad I ran into you, back at the Root." : "") ];
+  }
+  const lean = classifyLean(state);
+  if(lean==='genocide'){
+    return [
+      L('Mote',"Wait. Please."),
+      L('Mote',"I've counted. I know what you've been doing. I keep telling myself you'll stop, and you keep not stopping."),
+      L('Mote',"I still think the Hollow can be good. I have to believe that or none of this meant anything. So — please. Let it include you too. Stop here."),
+      CH([{id:'spare',label:'Let her go'},{id:'harm',label:'...'}], function(id,st){
+        if(id==='spare'){
+          return [ L('Mote',"...Thank you."), L('Mote',"I'll be at the top. I'm not leaving. I just needed you to choose it."), FN(function(s){ s.flags.moteResolved='spared'; Audio2.SFX.spare(); }) ];
+        }
+        return [ L(null,"..."), FN(function(s){ s.flags.moteResolved='killed'; s.flags.moteGone=true; s.stats.kills++; Audio2.SFX.hurt(); }), L(null,"The light she carried goes out. It doesn't flicker. It just stops.") ];
+      })
+    ];
+  }
+  return [
+    L('Mote',"You made it. Of course you made it."),
+    L('Mote',"Whatever happens up there — thank you for not needing to prove anything down here. That mattered. It mattered to me."),
+    FN(function(s){ s.flags.moteResolved='spared'; })
+  ];
+};
+
+DLG.nettle_ascent = function(state){
+  if(state.flags.metNettleAscent) return [ L('Nettle',"Go on, then. It's just up there.") ];
+  const lean = classifyLean(state);
+  let lines;
+  if(lean==='pacifist'){
+    lines = [
+      L('Nettle',"You're almost at the top, and you haven't hurt anyone who didn't ask you to, twice, before you listened."),
+      L('Nettle',"I don't know what to do with that. I've watched a long time. Nobody climbs this far still being gentle."),
+      L('Nettle',"I'm not being kind, telling you that. I'm being honest. I don't always know the difference anymore.")
+    ];
+  } else if(lean==='genocide'){
+    lines = [
+      L('Nettle',"..."),
+      L('Nettle',"You're not here to see the top. You're here because there's nothing left standing between you and it."),
+      L('Nettle',"I kept telling myself you'd stop. I think I need to stop telling myself that.")
+    ];
+  } else {
+    lines = [
+      L('Nettle',"Mercy for some. Not for others. That's most people, honestly. Almost everyone who's ever fallen down here."),
+      L('Nettle',"I used to find that disappointing. I'm not sure I do anymore.")
+    ];
+  }
+  if(state.flags.knowsWrenName) lines.push(L('Nettle',"You found the file. The name. I wondered if anyone ever would."));
+  lines.push(FN(function(s){ s.flags.metNettleAscent=true; }));
+  return lines;
+};
+
+ROOMS.sp_ascent = {
+  id:'sp_ascent', area:'lumen_spire', bgKind:'spire',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270} ],
+  decor:[ {type:'crystal',x:240,y:90,size:16,color:'#f2c14e'} ],
+  npcs:[
+    {uid:'nettle_ascent', x:160, y:180, sprite:'nettle', name:'Nettle', dialogueKey:'nettle_ascent', mood:'dynamic'},
+    {uid:'mote_gate', x:340, y:180, sprite:'mote', name:'Mote', dialogueKey:'mote_spire_gate', hidden:function(s){ return !!s.flags.moteGone; }}
+  ],
+  enemies:[],
+  objects:[],
+  exits:[
+    {x:440,y:120,w:30,h:60, toRoom:'sp_chamber', toX:40, toY:150, locked:true, lockFlag:'moteResolved'},
+    {x:0,y:120,w:24,h:60, toRoom:'hl_inner', toX:400, toY:150}
+  ]
+};
+
+ROOMS.sp_chamber = {
+  id:'sp_chamber', area:'lumen_spire', bgKind:'spire',
+  walls:[ {x:0,y:0,w:480,h:26},{x:0,y:236,w:480,h:34},{x:0,y:0,w:16,h:270},{x:462,y:0,w:18,h:270} ],
+  decor:[ {type:'crystal',x:240,y:70,size:22,color:'#f2c14e'} ],
+  npcs:[],
+  enemies:[],
+  objects:[],
+  exits:[],
+  onEnter:function(state){ enterSpireChamber(state); }
+};
+
+/* ============================================================
+   §DATA-ENEMIES
+   Attack pattern functions receive a running "battle" context
+   and elapsed phase time `pt`; they push bullets into battle.bullets.
+   Bullet shape: {x,y,vx,vy,r,color,kind,born, grav?,homeT?}
+   ============================================================ */
+const ENEMIES = {};
+ENEMIES.glimmerbug = {
+  id:'glimmerbug', name:'Glimmerbug', maxHp:12, atk:3, def:0, xp:2, gold:4,
+  sprite:drawGlimmerbugSprite, spriteOffsetY:-8,
+  checkText:'GLIMMERBUG — A static-winged light-eater. Mostly harmless. Mostly.',
+  acts:[ {label:'Watch', result:'It stops buzzing and watches you back. Seems calmer.', setsSpareable:true},
+         {label:'Shoo', result:'It scatters, startled, then drifts right back.', setsSpareable:false} ],
+  spareHint:'Try watching it a moment.',
+  pattern:patGlimmerbug
+};
+ENEMIES.mossling = {
+  id:'mossling', name:'Mossling', maxHp:16, atk:4, def:1, xp:3, gold:5,
+  sprite:drawMosslingSprite, spriteOffsetY:-6,
+  checkText:'MOSSLING — Shy, round, mostly moss. Misses stories about the surface it never saw.',
+  acts:[ {label:'Listen', result:'It tells you, quietly, what it imagines rain sounds like. It\'s close, actually.', setsSpareable:true},
+         {label:'Compliment', result:'It puffs up, pleased, moss bristling.', setsSpareable:false} ],
+  spareHint:'It wants to be heard, not fought.',
+  pattern:patMossling
+};
+ENEMIES.rustcap = {
+  id:'rustcap', name:'Rustcap', maxHp:18, atk:4, def:2, xp:3, gold:6,
+  sprite:drawRustcapSprite, spriteOffsetY:-10,
+  checkText:'RUSTCAP — Grew up in the ruins. Puffs spores when startled. Proud of its cap.',
+  acts:[ {label:'Admire its cap', result:'It preens, cap tilting proudly. Spores settle.', setsSpareable:true},
+         {label:'Ask about Glasswick', result:'It remembers the market loud and full. Misses it.', setsSpareable:false} ],
+  spareHint:'Try admiring something about it.',
+  pattern:patRustcap
+};
+ENEMIES.bonepetal = {
+  id:'bonepetal', name:'Bonepetal', maxHp:20, atk:5, def:2, xp:4, gold:6,
+  sprite:drawBonepetalSprite, spriteOffsetY:-13,
+  checkText:'BONEPETAL — Half flower, half something sturdier. Reminisces when it isn\'t attacking.',
+  acts:[ {label:'Offer silence', result:'It relaxes into the quiet, petals easing flat.', setsSpareable:true},
+         {label:'Ask its name', result:'It doesn\'t have one anymore. It had one once.', setsSpareable:false} ],
+  spareHint:'Sometimes the kindest act is no act at all.',
+  pattern:patBonepetal
+};
+ENEMIES.sparkmite = {
+  id:'sparkmite', name:'Sparkmite', maxHp:14, atk:5, def:0, xp:3, gold:5,
+  sprite:drawSparkmiteSprite, spriteOffsetY:-6,
+  checkText:'SPARKMITE — Escaped the labs years ago. Still twitches like something is watching.',
+  acts:[ {label:'Study calmly', result:'It slows down, studied right back, twitching less.', setsSpareable:true},
+         {label:'Apologize', result:'It doesn\'t understand the words, but it understands the tone.', setsSpareable:false} ],
+  spareHint:'It respects patience more than force.',
+  pattern:patSparkmite
+};
+ENEMIES.garrow = {
+  id:'garrow', name:'Garrow', maxHp:28, atk:6, def:3, xp:0, gold:0, boss:true,
+  resolveFlag:'garrowResolved',
+  sprite:drawGarrowSprite, spriteOffsetY:-14,
+  checkText:'GARROW — Guards this passage like it\'s the only thing holding him together. Maybe it is.',
+  acts:[
+    {label:'Ask about Briar', result:'His shell goes still. "My kid. Tried to leave through here. Never came back."', setsFlag:'actedBriar'},
+    {label:'Apologize', result:'"...Don\'t. You didn\'t do anything. That\'s almost the problem."', setsFlag:'actedApology'},
+    {label:'Hold your ground', result:'He doesn\'t flinch. Neither, somehow, do you.'}
+  ],
+  spareCondition:function(bflags){ return bflags.actedBriar && bflags.actedApology; },
+  spareHint:'He might open up, if you ask about what he lost.',
+  pattern:patGarrow
+};
+ENEMIES.rask = {
+  id:'rask', name:'Rask', maxHp:30, atk:7, def:2, xp:0, gold:0, boss:true,
+  resolveFlag:'raskResolved',
+  sprite:drawRaskSprite, spriteOffsetY:-16,
+  checkText:'RASK — Trains the Hold\'s youth to fight. Doesn\'t trust gentleness to keep anyone alive.',
+  acts:[
+    {label:'Ask about her family', result:'"My brother. A tunnel, years back. Mercy wasn\'t in the room when it mattered."', setsFlag:'actedFamily'},
+    {label:'Hold your stance', result:'She nods, once, like you\'ve earned a half-inch of respect.', setsFlag:'actedStance'},
+    {label:'Challenge her outright', result:'She almost smiles. "Now you\'re speaking my language."'}
+  ],
+  spareCondition:function(bflags){ return bflags.actedFamily && bflags.actedStance; },
+  spareHint:'Respect might land better than kindness, here.',
+  pattern:patRask
+};
+ENEMIES.specimen = {
+  id:'specimen', name:'the Specimen', maxHp:26, atk:6, def:2, xp:0, gold:0, boss:true,
+  resolveFlag:'specimenResolved',
+  sprite:drawSpecimenSprite, spriteOffsetY:-18,
+  checkText:'SPECIMEN — Unraveling at the seams, literally. Hesper couldn\'t bring herself to finish what she started.',
+  acts:[
+    {label:'Study it calmly', result:'It stops thrashing, just for a moment, watching you watch it.', setsFlag:'actedStudy'},
+    {label:'Apologize', result:'It doesn\'t understand "sorry." It understands you stopped being afraid of it.', setsFlag:'actedSorry'},
+    {label:'Hold still', result:'It circles you, uncertain, and doesn\'t attack this turn.'}
+  ],
+  spareCondition:function(bflags){ return bflags.actedStudy && bflags.actedSorry; },
+  spareHint:'Something in it is still listening, under the panic.',
+  pattern:patSpecimen
+};
+ENEMIES.hollow_bloom = {
+  id:'hollow_bloom', name:'Nettle', maxHp:120, atk:9, def:4, xp:0, gold:0, boss:true, unspareable:true, noFlee:true,
+  sprite:drawHollowBloomSprite, spriteOffsetY:-30,
+  checkText:'Not Nettle, anymore, not really. Something that used to watch and is now only hungry.',
+  acts:[ {label:'Call her Wren', result:'Nothing in her stops to listen. That name doesn\'t reach wherever she\'s gone.'} ],
+  mercyText:'There\'s nothing left in her that\'s still listening.',
+  fleeText:'There\'s nowhere left to run to.',
+  pattern:patHollowBloom
+};
+
+/* ============================================================
+   §DATA-ENEMIES — attack patterns
+   Each pattern(battle, pt, dt) runs every frame during an
+   enemy's attack phase and pushes bullets into battle.bullets.
+   battle.patternState is a fresh {} each phase, for timers.
+   Bullet: {x,y,vx,vy,r,color,dmg, shape?:'bar', w?,h?, life?,
+            home?:true, speed?, splitAt?, splitDone?}
+   ============================================================ */
+function patGlimmerbug(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.t===undefined) ps.t=0;
+  ps.t+=dt;
+  if(ps.t>0.45){
+    ps.t=0;
+    const bx=battle.box.x+Math.random()*battle.box.w;
+    battle.bullets.push({x:bx,y:battle.box.y-6,vx:0,vy:70+Math.random()*30,r:3,color:'#e8536b',dmg:battle.enemyDef.atk});
+  }
+}
+function patMossling(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.t===undefined) ps.t=0;
+  ps.t+=dt;
+  if(ps.t>0.6){
+    ps.t=0;
+    const fromLeft=Math.random()<0.5;
+    const y=battle.box.y+10+Math.random()*(battle.box.h-20);
+    battle.bullets.push({x:fromLeft?battle.box.x-6:battle.box.x+battle.box.w+6,y:y,vx:(fromLeft?1:-1)*65,vy:0,r:4,color:'#6f8a52',dmg:battle.enemyDef.atk});
+  }
+}
+function patRustcap(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.t===undefined) ps.t=0;
+  ps.t+=dt;
+  if(ps.t>1.0){
+    ps.t=0;
+    const cx=battle.box.x+20+Math.random()*(battle.box.w-40);
+    const cy=battle.box.y+20+Math.random()*(battle.box.h-40);
+    for(let i=0;i<8;i++){
+      const ang=(i/8)*Math.PI*2;
+      battle.bullets.push({x:cx,y:cy,vx:Math.cos(ang)*38,vy:Math.sin(ang)*38,r:3,color:'#c9683a',dmg:battle.enemyDef.atk,life:1.5});
+    }
+  }
+}
+function patBonepetal(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.t===undefined) ps.t=0;
+  ps.t+=dt;
+  if(ps.t>0.8){
+    ps.t=0;
+    const fromTop=Math.random()<0.5, n=5;
+    for(let i=0;i<n;i++){
+      const bx=battle.box.x+(i+0.5)*(battle.box.w/n);
+      battle.bullets.push({x:bx,y:fromTop?battle.box.y-6:battle.box.y+battle.box.h+6,vx:0,vy:(fromTop?1:-1)*(55+Math.random()*20),r:3,color:'#ded2bc',dmg:battle.enemyDef.atk});
+    }
+  }
+}
+function patSparkmite(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.t===undefined) ps.t=0;
+  ps.t+=dt;
+  if(ps.t>0.35){
+    ps.t=0;
+    const x=battle.box.x+Math.random()*battle.box.w, y=battle.box.y+Math.random()*battle.box.h;
+    battle.bullets.push({x:x,y:y,vx:0,vy:0,r:5,color:'#dfe84e',dmg:battle.enemyDef.atk,life:0.55});
+  }
+}
+function patGarrow(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.phase===undefined){ ps.phase=0; ps.t=0; ps.spawnT=0; ps.spawnT2=0; }
+  ps.t+=dt;
+  if(ps.t>3.2){ ps.t=0; ps.phase=1-ps.phase; }
+  if(ps.phase===0){
+    ps.spawnT-=dt;
+    if(ps.spawnT<=0){
+      ps.spawnT=0.5;
+      const fromLeft=Math.random()<0.5;
+      const y=battle.box.y+10+Math.random()*(battle.box.h-20);
+      battle.bullets.push({x:fromLeft?battle.box.x-8:battle.box.x+battle.box.w+8,y:y,vx:(fromLeft?1:-1)*90,vy:0,r:6,color:'#5a7a52',dmg:battle.enemyDef.atk});
+    }
+  } else {
+    ps.spawnT2-=dt;
+    if(ps.spawnT2<=0){
+      ps.spawnT2=0.3;
+      const bx=battle.box.x+Math.random()*battle.box.w;
+      battle.bullets.push({x:bx,y:battle.box.y-6,vx:0,vy:100,r:5,color:'#9a8362',dmg:battle.enemyDef.atk});
+    }
+  }
+}
+function patRask(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.t===undefined){ ps.t=0; ps.sweeps=0; }
+  ps.t+=dt;
+  if(ps.t>1.3){
+    ps.t=0;
+    const y=battle.box.y+14+Math.random()*(battle.box.h-28);
+    const fromLeft=Math.random()<0.5;
+    battle.bullets.push({x:fromLeft?battle.box.x-16:battle.box.x+battle.box.w+16,y:y,vx:(fromLeft?1:-1)*140,vy:0,r:5,w:26,h:5,color:'#9a9aa8',dmg:battle.enemyDef.atk,shape:'bar'});
+    ps.sweeps++;
+    if(ps.sweeps%3===0){
+      const hx=battle.heart.x, hy=battle.heart.y;
+      const cx=battle.box.x+battle.box.w/2, cy=battle.box.y+battle.box.h/2;
+      const ang=Math.atan2(hy-cy,hx-cx);
+      battle.bullets.push({x:cx,y:cy,vx:Math.cos(ang)*120,vy:Math.sin(ang)*120,r:4,color:'#8a3140',dmg:battle.enemyDef.atk+1});
+    }
+  }
+}
+function patSpecimen(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.t===undefined) ps.t=0;
+  ps.t+=dt;
+  if(ps.t>0.45){
+    ps.t=0;
+    const x=battle.box.x+Math.random()*battle.box.w, y=battle.box.y+Math.random()*battle.box.h;
+    battle.bullets.push({x:x,y:y,vx:(Math.random()-0.5)*55,vy:(Math.random()-0.5)*55,r:4,color:'#9a9a8a',dmg:battle.enemyDef.atk,life:1.6,splitAt:0.8,splitDone:false});
+  }
+}
+function patHollowBloom(battle,pt,dt){
+  const ps=battle.patternState;
+  if(ps.phase===undefined){ ps.phase=0; ps.t=0; ps.spawnT=0; ps.spawnT2=0; ps.spawnT3=0; }
+  ps.t+=dt;
+  if(ps.t>3.6){ ps.t=0; ps.phase=(ps.phase+1)%3; }
+  if(ps.phase===0){
+    ps.spawnT-=dt;
+    if(ps.spawnT<=0){
+      ps.spawnT=1.1;
+      const cx=battle.box.x+battle.box.w/2, cy=battle.box.y+battle.box.h/2;
+      const n=10, rot=Math.random()*Math.PI;
+      for(let i=0;i<n;i++){
+        const ang=(i/n)*Math.PI*2+rot;
+        battle.bullets.push({x:cx,y:cy,vx:Math.cos(ang)*75,vy:Math.sin(ang)*75,r:4,color:'#8a7a90',dmg:battle.enemyDef.atk});
+      }
+    }
+  } else if(ps.phase===1){
+    ps.spawnT2-=dt;
+    if(ps.spawnT2<=0){
+      ps.spawnT2=0.55;
+      const y1=battle.box.y+22, y2=battle.box.y+battle.box.h-22;
+      const fromLeft=Math.random()<0.5;
+      battle.bullets.push({x:fromLeft?battle.box.x-16:battle.box.x+battle.box.w+16,y:y1,vx:(fromLeft?1:-1)*120,vy:0,r:5,w:24,h:5,color:'#6a3a46',dmg:battle.enemyDef.atk,shape:'bar'});
+      battle.bullets.push({x:!fromLeft?battle.box.x-16:battle.box.x+battle.box.w+16,y:y2,vx:(!fromLeft?1:-1)*120,vy:0,r:5,w:24,h:5,color:'#6a3a46',dmg:battle.enemyDef.atk,shape:'bar'});
+    }
+  } else {
+    ps.spawnT3-=dt;
+    if(ps.spawnT3<=0){
+      ps.spawnT3=0.9;
+      const edge=Math.floor(Math.random()*4);
+      let x,y;
+      if(edge===0){ x=battle.box.x-6; y=battle.box.y+Math.random()*battle.box.h; }
+      else if(edge===1){ x=battle.box.x+battle.box.w+6; y=battle.box.y+Math.random()*battle.box.h; }
+      else if(edge===2){ x=battle.box.x+Math.random()*battle.box.w; y=battle.box.y-6; }
+      else { x=battle.box.x+Math.random()*battle.box.w; y=battle.box.y+battle.box.h+6; }
+      battle.bullets.push({x:x,y:y,vx:0,vy:0,r:4,color:'#e8536b',dmg:battle.enemyDef.atk,home:true,speed:46,life:4.5});
+    }
+  }
+}
+
+/* ============================================================
+   §STATE
+   ============================================================ */
+let TOTAL_REGULAR_ENEMIES = 0;
+let G = null; // the active game-state object once a game is running
+
+function newGameState(playerName){
+  return {
+    version:1,
+    playerName: playerName || 'Wanderer',
+    area:'hollow_root', room:'hr_landing', x:240, y:150, facing:'down',
+    hp:20, maxHp:20, atk:5, def:5, grit:1, gold:15,
+    inventory:[],
+    flags:{},
+    stats:{ kills:0, spares:0, fled:0 },
+    _moving:false, _animT:0
+  };
+}
+function addItem(state,itemId,count){
+  count=count||1;
+  const ex = state.inventory.find(function(e){return e.id===itemId;});
+  if(ex) ex.count+=count; else state.inventory.push({id:itemId,count:count});
+}
+function removeItem(state,itemId,count){
+  count=count||1;
+  const idx = state.inventory.findIndex(function(e){return e.id===itemId;});
+  if(idx<0) return false;
+  state.inventory[idx].count-=count;
+  if(state.inventory[idx].count<=0) state.inventory.splice(idx,1);
+  return true;
+}
+function countTotalRegularEnemies(){
+  let n=0;
+  for(const rid in ROOMS){
+    (ROOMS[rid].enemies||[]).forEach(function(e){
+      const def=ENEMIES[e.enemyId];
+      if(def && !def.resolveFlag) n++; // boss-type enemies resolve via their own story flag, not killedEnemyUids
+    });
+  }
+  return n;
+}
+function isEnemyResolved(state,uid){
+  const f=state.flags;
+  return !!((f.killedEnemyUids && f.killedEnemyUids.indexOf(uid)>=0) || (f.sparedEnemyUids && f.sparedEnemyUids.indexOf(uid)>=0));
+}
+function computeEnding(state){
+  const f=state.flags, st=state.stats;
+  const namedFlags=[f.garrowResolved,f.raskResolved,f.moteResolved,f.jibbResolved,f.hesperResolved];
+  const anyNamedKilled = namedFlags.some(function(v){return v==='killed';});
+  const allNamedKilled = namedFlags.every(function(v){return v==='killed';});
+  const regularKilled = (f.killedEnemyUids||[]).length;
+  if(st.kills===0 && !anyNamedKilled) return 'pacifist';
+  if(allNamedKilled && regularKilled>=TOTAL_REGULAR_ENEMIES) return 'genocide';
+  return 'neutral';
+}
+function recalcPlayerStats(state){
+  const grit = 1+Math.min(state.stats.kills,12);
+  const leveledUp = grit>state.grit;
+  state.grit=grit;
+  state.maxHp = 20+(grit-1)*4;
+  state.atk = 5+(grit-1)*1;
+  state.def = 5+(grit-1)*1;
+  if(leveledUp){ state.hp = state.maxHp; }
+  else state.hp = Math.min(state.hp,state.maxHp);
+}
+function registerKill(state){
+  state.stats.kills++;
+  recalcPlayerStats(state);
+  Audio2.SFX.levelUp();
+}
+function resolveBattleOutcome(state, enemyDef, uid, outcome){
+  if(outcome==='fled'){ state.stats.fled++; return; }
+  if(enemyDef.resolveFlag){
+    state.flags[enemyDef.resolveFlag] = outcome;
+  } else {
+    if(outcome==='killed'){ state.flags.killedEnemyUids=state.flags.killedEnemyUids||[]; state.flags.killedEnemyUids.push(uid); }
+    else { state.flags.sparedEnemyUids=state.flags.sparedEnemyUids||[]; state.flags.sparedEnemyUids.push(uid); state.stats.spares++; }
+  }
+  if(outcome==='killed') registerKill(state);
+}
+function updateAreaMusic(state){
+  const area=state.area;
+  let track='area1';
+  if(area==='hollow_root') track='area1';
+  else if(area==='driftwood') track='area2';
+  else if(area==='glasswick') track='area3';
+  else if(area==='hush_labs') track='area4';
+  else if(area==='lumen_spire'){ track = classifyLean(state)==='genocide' ? 'area5_dark' : 'area5_warm'; }
+  Audio2.startMusic(track);
+}
+
+/* ============================================================
+   §OVERWORLD
+   ============================================================ */
+const PLAYER_SPEED = 80;
+const AREA_PALETTES = {
+  root:       {bg0:'#120e1c',bg1:'#1c1530',wall:'#241c3a',wallEdge:'#3a2d5c',floor:'#1a1428'},
+  settlement: {bg0:'#17120f',bg1:'#241a14',wall:'#3a2a1e',wallEdge:'#5a4230',floor:'#1e1712'},
+  ruins:      {bg0:'#13111a',bg1:'#211d2c',wall:'#332e42',wallEdge:'#4e475f',floor:'#1b1822'},
+  lab:        {bg0:'#0d1316',bg1:'#162024',wall:'#263338',wallEdge:'#3a4a50',floor:'#121a1d'},
+  spire:      {bg0:'#140f1e',bg1:'#241736',wall:'#3a2a52',wallEdge:'#5a4478',floor:'#1c1430'}
+};
+const NPC_SPRITE_FNS = {
+  mote:drawMoteSprite, garrow:drawGarrowSprite, jibb:drawJibbSprite, rask:drawRaskSprite,
+  hesper:drawHesperSprite, nettle:drawNettleSprite, coda_generic:drawCodaSprite, tull_generic:drawTullSprite
+};
+function playerBox(x,y){ return {x:x-6,y:y-7,w:12,h:9}; }
+function actorBox(x,y){ return {x:x-8,y:y-7,w:16,h:9}; }
+
+function roomSolids(room,state){
+  const list=[];
+  (room.walls||[]).forEach(function(w){ list.push({x:w.x,y:w.y,w:w.w,h:w.h,kind:'wall'}); });
+  (room.objects||[]).forEach(function(o){
+    if(o.type==='pushblock'){ list.push({x:o.x-8,y:o.y-8,w:16,h:16,kind:'pushblock',ref:o}); }
+    else if(o.type==='gate'){ if(!state.flags[o.openFlag]){ list.push({x:o.x,y:o.y,w:o.w,h:o.h,kind:'gate'}); } }
+    else if(o.type==='memorial'){ if(!state.flags.memorialBroken){ list.push({x:o.x-9,y:o.y-24,w:18,h:24,kind:'memorial'}); } }
+    else if(o.type==='shop'){ list.push({x:o.x-16,y:o.y-20,w:32,h:20,kind:'shop'}); }
+  });
+  (room.npcs||[]).forEach(function(n){
+    if(n.hidden && n.hidden(state)) return;
+    const b=actorBox(n.x,n.y); list.push({x:b.x,y:b.y,w:b.w,h:b.h,kind:'npc',ref:n});
+  });
+  (room.enemies||[]).forEach(function(e){
+    if(isEnemyResolved(state,e.uid)) return;
+    const b=actorBox(e.x,e.y); list.push({x:b.x,y:b.y,w:b.w,h:b.h,kind:'enemy',ref:e});
+  });
+  return list;
+}
+function tryPushBlock(state,room,block,mx,my){
+  if(mx===0 && my===0) return false;
+  const nx=block.x+mx, ny=block.y+my;
+  const bb={x:nx-8,y:ny-8,w:16,h:16};
+  const others = roomSolids(room,state).filter(function(s){ return s.kind!=='pushblock' || s.ref!==block; });
+  for(let i=0;i<others.length;i++){
+    if(others[i].kind==='pushblock' && others[i].ref===block) continue;
+    if(aabb(bb.x,bb.y,bb.w,bb.h, others[i].x,others[i].y,others[i].w,others[i].h)) return false;
+  }
+  if(nx<26||nx>454||ny<26||ny>244) return false;
+  block.x=nx; block.y=ny;
+  checkPlateActivation(state,room);
+  return true;
+}
+function tryMove(state,room,mx,my){
+  const solids = roomSolids(room,state);
+  if(mx!==0){
+    const nb = playerBox(state.x+mx, state.y);
+    let blocked=false;
+    for(let i=0;i<solids.length;i++){
+      if(aabb(nb.x,nb.y,nb.w,nb.h, solids[i].x,solids[i].y,solids[i].w,solids[i].h)){
+        if(solids[i].kind==='pushblock' && tryPushBlock(state,room,solids[i].ref,mx,0)) continue;
+        blocked=true; break;
+      }
+    }
+    if(!blocked) state.x += mx;
+  }
+  if(my!==0){
+    const nb = playerBox(state.x, state.y+my);
+    let blocked=false;
+    for(let i=0;i<solids.length;i++){
+      if(aabb(nb.x,nb.y,nb.w,nb.h, solids[i].x,solids[i].y,solids[i].w,solids[i].h)){
+        if(solids[i].kind==='pushblock' && tryPushBlock(state,room,solids[i].ref,0,my)) continue;
+        blocked=true; break;
+      }
+    }
+    if(!blocked) state.y += my;
+  }
+  state.x = clamp(state.x, 16, 464);
+  state.y = clamp(state.y, 16, 258);
+}
+function checkPlateActivation(state,room){
+  (room.objects||[]).forEach(function(o){
+    if(o.type!=='plate') return;
+    let active=false;
+    (room.objects||[]).forEach(function(o2){
+      if(o2.type!=='pushblock') return;
+      if(Math.abs(o2.x-o.x)<(o.w||24)/2+6 && Math.abs(o2.y-o.y)<14) active=true;
+    });
+    o.active=active;
+    if(o.activatesFlag && active) state.flags[o.activatesFlag]=true;
+  });
+}
+const SWITCH_TARGET=['right','left','center'];
+function pressSwitch(state,key){
+  if(state.flags.hrSwitchesSolved){ Audio2.SFX.blip(); return; }
+  state.flags.switchSeq = state.flags.switchSeq||[];
+  state.flags.switchSeq.push(key);
+  if(state.flags.switchSeq.length>3) state.flags.switchSeq.shift();
+  Audio2.SFX.switchFlip();
+  if(state.flags.switchSeq.length===3){
+    const ok = state.flags.switchSeq[0]===SWITCH_TARGET[0] && state.flags.switchSeq[1]===SWITCH_TARGET[1] && state.flags.switchSeq[2]===SWITCH_TARGET[2];
+    if(ok){ state.flags.hrSwitchesSolved=true; Audio2.SFX.puzzle(); }
+    else { state.flags.switchSeq=[]; }
+  }
+}
+function interactLamp(state,key){
+  state.flags.labLamp = state.flags.labLamp || {left:0,mid:0,right:0};
+  state.flags.labLamp[key] = (state.flags.labLamp[key]+1)%3;
+  Audio2.SFX.switchFlip();
+  const Lm=state.flags.labLamp;
+  if(!state.flags.labDoorOpen && Lm.left===LAB_TARGET.left && Lm.mid===LAB_TARGET.mid && Lm.right===LAB_TARGET.right){
+    state.flags.labDoorOpen=true;
+    Audio2.SFX.puzzle();
+  }
+}
+function facingOffset(state){
+  switch(state.facing){ case 'left': return {x:-13,y:0}; case 'right': return {x:13,y:0}; case 'up': return {x:0,y:-13}; default: return {x:0,y:11}; }
+}
+function tryInteract(state,room){
+  const off = facingOffset(state);
+  const px0 = state.x+off.x, py0 = state.y+off.y-4;
+  for(let i=0;i<(room.npcs||[]).length;i++){
+    const n=room.npcs[i];
+    if(n.hidden && n.hidden(state)) continue;
+    if(dist(px0,py0,n.x,n.y-5)<17){
+      if(n.shop){ startDialogueForNpc(state,n); return; }
+      startDialogueForNpc(state,n); return;
+    }
+  }
+  for(let i=0;i<(room.objects||[]).length;i++){
+    const o=room.objects[i];
+    if(o.type==='pushblock'||o.type==='plate'||o.type==='gate') continue;
+    const oy = o.y - (o.type==='memorial'?12:(o.type==='lamp'?10:0));
+    if(dist(px0,py0,o.x,oy)<19){ interactObject(state,o); return; }
+  }
+  for(let i=0;i<(room.objects||[]).length;i++){
+    const o=room.objects[i];
+    if(o.type==='switch' && dist(px0,py0,o.x,o.y)<17){ pressSwitch(state,o.key); return; }
+  }
+}
+function interactObject(state,o){
+  if(o.type==='sign'){ runDialogueScript(null,null,DLG[o.dlg](state)); }
+  else if(o.type==='lamp'){ interactLamp(state,o.key); }
+  else if(o.type==='memorial'){ runDialogueScript(null,null,DLG.memorial_examine(state)); }
+}
+function startDialogueForNpc(state,n){
+  const script = DLG[n.dialogueKey] ? DLG[n.dialogueKey](state) : null;
+  if(!script || script.length===0) return;
+  runDialogueScript(n.name, n.sprite, script);
+}
+function checkEnemyContact(state,room){
+  if(DialogueBox.active || Battle.active) return;
+  const pb = playerBox(state.x,state.y);
+  for(let i=0;i<(room.enemies||[]).length;i++){
+    const e=room.enemies[i];
+    if(isEnemyResolved(state,e.uid)) continue;
+    const eb=actorBox(e.x,e.y);
+    if(aabb(pb.x,pb.y,pb.w,pb.h, eb.x,eb.y,eb.w,eb.h)){
+      Battle.start(e.enemyId, e.uid, {});
+      return;
+    }
+  }
+}
+function checkExits(state,room){
+  if(DialogueBox.active || Battle.active) return;
+  const pb = playerBox(state.x,state.y);
+  for(let i=0;i<(room.exits||[]).length;i++){
+    const ex=room.exits[i];
+    if(aabb(pb.x,pb.y,pb.w,pb.h, ex.x,ex.y,ex.w,ex.h)){
+      if(ex.locked && !state.flags[ex.lockFlag]) continue;
+      goToRoom(state, ex.toRoom, ex.toX, ex.toY);
+      return;
+    }
+  }
+}
+function goToRoom(state,roomId,toX,toY){
+  const fade=document.getElementById('fade-overlay');
+  fade.classList.add('active');
+  setTimeout(function(){
+    state.room=roomId; state.x=toX; state.y=toY;
+    const room = ROOMS[roomId];
+    state.area = room.area;
+    checkPlateActivation(state,room);
+    updateAreaMusic(state);
+    layoutGame();
+    renderHud(state);
+    setTimeout(function(){
+      fade.classList.remove('active');
+      if(room.onEnter) room.onEnter(state);
+    }, 60);
+  }, 300);
+}
+function updateOverworld(dt){
+  const state=G;
+  if(!state) return;
+  const room = ROOMS[state.room];
+  if(!room) return;
+  state._animT=(state._animT||0)+dt;
+  if(DialogueBox.active || Battle.active || UIMode.current!=='overworld'){
+    if(Input.consume('confirm')){ /* swallowed elsewhere */ }
+    return;
+  }
+  let dx=0,dy=0;
+  if(Input.held.left){ dx-=1; state.facing='left'; }
+  if(Input.held.right){ dx+=1; state.facing='right'; }
+  if(Input.held.up){ dy-=1; state.facing='up'; }
+  if(Input.held.down){ dy+=1; state.facing='down'; }
+  const moving = dx!==0||dy!==0;
+  if(moving){
+    const len=Math.sqrt(dx*dx+dy*dy); dx/=len; dy/=len;
+    tryMove(state,room,dx*PLAYER_SPEED*dt,dy*PLAYER_SPEED*dt);
+  }
+  state._moving=moving;
+  if(Input.consume('confirm')) tryInteract(state,room);
+  checkEnemyContact(state,room);
+  checkExits(state,room);
+}
+function drawRoomBackground(ctx,room){
+  const pal = AREA_PALETTES[room.bgKind]||AREA_PALETTES.root;
+  const g = ctx.createLinearGradient(0,0,0,270);
+  g.addColorStop(0,pal.bg1); g.addColorStop(1,pal.bg0);
+  ctx.fillStyle=g; ctx.fillRect(0,0,480,270);
+  ctx.fillStyle=pal.floor; ctx.fillRect(16,26,448,210);
+  let seed=0; for(let i=0;i<room.id.length;i++) seed+=room.id.charCodeAt(i);
+  ctx.globalAlpha=0.5;
+  for(let i=0;i<24;i++){
+    const rx=16+((seed*7+i*53)%448), ry=26+((seed*13+i*31)%208);
+    px(ctx,rx,ry,2,2,pal.wallEdge);
+  }
+  ctx.globalAlpha=1;
+}
+function drawDecor(ctx,d,t){
+  if(d.type==='moss') drawMossPatch(ctx,d.x,d.y,d.seed||1);
+  else if(d.type==='rubble') drawRubble(ctx,d.x,d.y,d.seed||1);
+  else if(d.type==='crystal') drawCrystal(ctx,d.x,d.y,d.size||10,d.color||'#f2c14e',t);
+  else if(d.type==='plank'){ px(ctx,d.x-20,d.y-3,40,6,'#4a2e1e'); px(ctx,d.x-20,d.y-4,40,2,'#6a4a30'); }
+  else if(d.type==='water') drawWaterStrip(ctx,d.x,d.y,d.w||60,d.h||14,t);
+}
+function drawObjectProp(ctx,o,state,t){
+  if(o.type==='switch'){
+    const seq=state.flags.switchSeq||[];
+    drawSwitchProp(ctx,o.x,o.y, seq.indexOf(o.key)>=0 || !!state.flags.hrSwitchesSolved);
+  }
+  else if(o.type==='pushblock') drawPushBlock(ctx,o.x-8,o.y-8,16);
+  else if(o.type==='plate') drawPlate(ctx,o.x-(o.w||24)/2,o.y-2,o.w||24, !!o.active);
+  else if(o.type==='gate') drawGate(ctx,o.x,o.y,o.w,o.h, !!state.flags[o.openFlag]);
+  else if(o.type==='memorial') drawMemorialStatue(ctx,o.x,o.y, !!state.flags.memorialBroken);
+  else if(o.type==='sign') drawSignpost(ctx,o.x,o.y);
+  else if(o.type==='lamp'){ const Lm=state.flags.labLamp||{left:0,mid:0,right:0}; drawLampPost(ctx,o.x,o.y,Lm[o.key]||0,t); }
+}
+function renderOverworld(ctx,state){
+  const room=ROOMS[state.room];
+  if(!room) return;
+  const t=state._animT||0;
+  drawRoomBackground(ctx,room);
+  (room.decor||[]).forEach(function(d){ drawDecor(ctx,d,t); });
+  (room.objects||[]).forEach(function(o){ drawObjectProp(ctx,o,state,t); });
+  (room.objects||[]).forEach(function(o){ if(o.type==='shop') drawShopStand(ctx,o.x,o.y); });
+  if(room.id==='hl_entrance'||room.id==='hl_inner'){
+    (room.objects||[]).length; // labs use lamp posts already drawn; machinery decoration handled via lamp props
+  }
+  (room.walls||[]).forEach(function(w){ drawWallBlock(ctx,w.x,w.y,w.w,w.h,(AREA_PALETTES[room.bgKind]||AREA_PALETTES.root).wall,(AREA_PALETTES[room.bgKind]||AREA_PALETTES.root).wallEdge); });
+  const actors=[];
+  (room.npcs||[]).forEach(function(n){
+    if(n.hidden && n.hidden(state)) return;
+    actors.push({y:n.y, draw:function(){
+      const fn=NPC_SPRITE_FNS[n.sprite];
+      if(fn){
+        let mood=n.mood||'neutral';
+        if(mood==='dynamic'){ const lean=classifyLean(state); mood = lean==='genocide'?'dark':(lean==='pacifist'?'happy':'sly'); }
+        fn(ctx,n.x,n.y,t,mood);
+      }
+      if(n.shop) drawShopStand(ctx,n.x,n.y+2);
+    }});
+  });
+  (room.enemies||[]).forEach(function(e){
+    if(isEnemyResolved(state,e.uid)) return;
+    actors.push({y:e.y, draw:function(){ const def=ENEMIES[e.enemyId]; if(def) def.sprite(ctx,e.x,e.y,t,0); }});
+  });
+  actors.push({y:state.y, draw:function(){ drawPlayerSprite(ctx,state.x,state.y,t,state.facing,state._moving,0); }});
+  actors.sort(function(a,b){ return a.y-b.y; });
+  actors.forEach(function(a){ a.draw(); });
+}
+
+/* ============================================================
+   §DIALOGUEBOX
+   ============================================================ */
+const TEXT_SPEED_CHARS = {1:14, 2:26, 3:999};
+const DialogueBox = {
+  active:false, queue:[], index:0, defaultName:null, defaultSprite:null,
+  _fullText:'', _typedChars:0, _lineDone:false,
+  _choiceMode:false, _choiceButtons:[], _choiceIndex:0, _pendingChoiceStep:null
+};
+function runDialogueScript(name, spriteKey, script){
+  if(!script || script.length===0) return;
+  DialogueBox.active=true;
+  DialogueBox.queue=script.slice();
+  DialogueBox.index=0;
+  DialogueBox.defaultName=name;
+  DialogueBox.defaultSprite=spriteKey;
+  document.getElementById('dialogue-box').classList.remove('hidden');
+  layoutGame();
+  advanceDialogue();
+}
+function advanceDialogue(){
+  if(DialogueBox.index>=DialogueBox.queue.length){ closeDialogue(); return; }
+  const step=DialogueBox.queue[DialogueBox.index];
+  if(step.fn){ DialogueBox.index++; step.fn(G); advanceDialogue(); return; }
+  if(step.battleStart){ const id=step.battleStart; DialogueBox.index++; closeDialogue(); Battle.start(id,null,{}); return; }
+  if(step.choice){ showChoiceStep(step); return; }
+  showLineStep(step);
+}
+function showLineStep(step){
+  const nameEl=document.getElementById('dlg-name');
+  const name = step.spk===null ? '' : (step.spk || DialogueBox.defaultName || '');
+  nameEl.textContent=name;
+  nameEl.style.visibility = name? 'visible':'hidden';
+  const spriteKey = step.spk===null ? null : DialogueBox.defaultSprite;
+  renderPortrait(spriteKey,'neutral',G?G._animT:0);
+  document.getElementById('dlg-choices').classList.add('hidden');
+  document.getElementById('dlg-hint').classList.remove('hidden');
+  DialogueBox._fullText = step.t||'';
+  DialogueBox._typedChars=0;
+  DialogueBox._lineDone=false;
+  document.getElementById('dlg-text').textContent='';
+  Audio2.SFX.blip();
+}
+function showChoiceStep(step){
+  document.getElementById('dlg-text').textContent='';
+  document.getElementById('dlg-hint').classList.add('hidden');
+  document.getElementById('dlg-name').style.visibility='hidden';
+  renderPortrait(null,'neutral',0);
+  const wrap=document.getElementById('dlg-choices');
+  wrap.innerHTML=''; wrap.classList.remove('hidden');
+  step.choice.forEach(function(c,i){
+    const btn=document.createElement('button');
+    btn.className='dlg-choice-btn'+(i===0?' kbd-sel':'');
+    btn.textContent=c.label;
+    btn.addEventListener('click', function(){ DialogueBox._choiceIndex=i; pickChoice(step,c.id); });
+    wrap.appendChild(btn);
+  });
+  DialogueBox._choiceButtons = Array.prototype.slice.call(wrap.children);
+  DialogueBox._choiceIndex=0;
+  DialogueBox._choiceMode=true;
+  DialogueBox._pendingChoiceStep=step;
+}
+function updateChoiceSel(){
+  DialogueBox._choiceButtons.forEach(function(b,i){ b.classList.toggle('kbd-sel', i===DialogueBox._choiceIndex); });
+}
+function pickChoice(step,id){
+  Audio2.SFX.confirm();
+  DialogueBox._choiceMode=false;
+  document.getElementById('dlg-choices').classList.add('hidden');
+  DialogueBox.index++;
+  const more = step.onPick ? step.onPick(id,G) : null;
+  if(more && more.length){
+    const args=[DialogueBox.index,0].concat(more);
+    Array.prototype.splice.apply(DialogueBox.queue,args);
+  }
+  advanceDialogue();
+}
+function closeDialogue(){
+  DialogueBox.active=false;
+  DialogueBox.queue=[]; DialogueBox.index=0;
+  document.getElementById('dialogue-box').classList.add('hidden');
+  layoutGame();
+}
+DialogueBox.update = function(dt){
+  if(!DialogueBox.active) return;
+  if(DialogueBox._choiceMode){
+    if(Input.consume('navDown')){ DialogueBox._choiceIndex=(DialogueBox._choiceIndex+1)%DialogueBox._choiceButtons.length; updateChoiceSel(); Audio2.SFX.menuMove(); }
+    if(Input.consume('navUp')){ DialogueBox._choiceIndex=(DialogueBox._choiceIndex-1+DialogueBox._choiceButtons.length)%DialogueBox._choiceButtons.length; updateChoiceSel(); Audio2.SFX.menuMove(); }
+    if(Input.consume('confirm')){ const step=DialogueBox._pendingChoiceStep; pickChoice(step, step.choice[DialogueBox._choiceIndex].id); }
+    return;
+  }
+  const textEl=document.getElementById('dlg-text');
+  if(!DialogueBox._lineDone){
+    const speed = TEXT_SPEED_CHARS[(typeof Settings!=='undefined'&&Settings.textSpeed)||2];
+    DialogueBox._typedChars += speed*dt;
+    const n=Math.floor(DialogueBox._typedChars);
+    if(n>=DialogueBox._fullText.length){ textEl.textContent=DialogueBox._fullText; DialogueBox._lineDone=true; }
+    else textEl.textContent=DialogueBox._fullText.slice(0,n);
+    if(Input.consume('confirm')){ textEl.textContent=DialogueBox._fullText; DialogueBox._lineDone=true; }
+  } else {
+    if(Input.consume('confirm')){ DialogueBox.index++; advanceDialogue(); }
+  }
+};
+function renderPortrait(spriteKey,mood,t){
+  const canvas=document.getElementById('dlg-portrait');
+  if(!canvas) return;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,32,32);
+  if(!spriteKey) return;
+  if(spriteKey==='player'){ drawPlayerSprite(ctx,16,29,t||0,'down',false,0); return; }
+  const fn=NPC_SPRITE_FNS[spriteKey];
+  if(fn) fn(ctx,16,29,t||0,mood||'neutral');
+}
+
+/* ============================================================
+   §BATTLE
+   ============================================================ */
+const Battle = {
+  active:false, enemyId:null, enemyUid:null, enemyDef:null,
+  enemyHp:0, enemyMaxHp:0, heart:{x:0,y:0},
+  box:{x:150,y:100,w:180,h:120}, bullets:[], patternState:{},
+  phase:'menu', menuIndex:0, subIndex:0, bflags:{}, spareable:false,
+  hurtT:0, enemyHurtT:0, attackT:0, attackDuration:2.5,
+  onResolve:null, _actItems:[], _itemEntries:[], _mercyOptions:[], _subListRef:[]
+};
+function checkSpareable(){
+  const def=Battle.enemyDef;
+  if(def.unspareable) return false;
+  if(def.spareCondition) return def.spareCondition(Battle.bflags);
+  return Object.keys(Battle.bflags).length>0 || Battle.enemyHp<=Battle.enemyMaxHp*0.6;
+}
+Battle.start = function(enemyId, uid, opts){
+  opts=opts||{};
+  const def=ENEMIES[enemyId];
+  if(!def) return;
+  Battle.active=true;
+  Battle.enemyId=enemyId; Battle.enemyUid=uid; Battle.enemyDef=def;
+  Battle.enemyHp=def.maxHp; Battle.enemyMaxHp=def.maxHp;
+  Battle.box={x:150,y:100,w:180,h:120};
+  Battle.heart={x:Battle.box.x+Battle.box.w/2,y:Battle.box.y+Battle.box.h/2};
+  Battle.bullets=[]; Battle.patternState={};
+  Battle.phase='menu'; Battle.menuIndex=0; Battle.subIndex=0; Battle.bflags={};
+  Battle.hurtT=0; Battle.enemyHurtT=0;
+  Battle.onResolve = opts.onResolve||null;
+  document.getElementById('battle-ui').classList.remove('hidden');
+  hideAllBattleMenus();
+  renderBattleMenu();
+  setBattleMsg((def.boss? (def.name+' stands in your way.') : (def.name+' appears!')));
+  updateBattleStatsUI();
+  layoutGame();
+  Audio2.startMusic(def.boss?'battle_boss':'battle');
+};
+function hideAllBattleMenus(){
+  document.getElementById('battle-menu-grid').classList.add('hidden');
+  document.getElementById('battle-sub-list').classList.add('hidden');
+}
+function renderBattleMenu(){
+  document.getElementById('battle-sub-list').classList.add('hidden');
+  document.getElementById('battle-menu-grid').classList.remove('hidden');
+  const btns=document.querySelectorAll('.battle-menu-btn');
+  btns.forEach(function(b,i){ b.classList.toggle('kbd-sel', i===Battle.menuIndex); });
+}
+function renderSubList(items){
+  document.getElementById('battle-menu-grid').classList.add('hidden');
+  const wrap=document.getElementById('battle-sub-list');
+  wrap.classList.remove('hidden'); wrap.innerHTML='';
+  items.forEach(function(it,i){
+    const d=document.createElement('button');
+    d.className='battle-sub-item'+(i===Battle.subIndex?' kbd-sel':'');
+    d.innerHTML='<span>'+it.label+'</span>'+(it.hp!=null?('<small>'+it.hp+'</small>'):'');
+    d.addEventListener('click', function(){ Battle.subIndex=i; chooseSubItem(i); });
+    wrap.appendChild(d);
+  });
+  Battle._subListRef=items;
+}
+function renderSubListSelection(){
+  const wrap=document.getElementById('battle-sub-list');
+  Array.prototype.forEach.call(wrap.children, function(el,i){ el.classList.toggle('kbd-sel', i===Battle.subIndex); });
+}
+function setBattleMsg(t){ document.getElementById('battle-msg').textContent=t; }
+function updateBattleStatsUI(){
+  document.getElementById('battle-hp').textContent=G.hp+'/'+G.maxHp;
+  const wrap=document.getElementById('battle-enemy-hp-wrap');
+  if(Battle.enemyDef && Battle.enemyDef.boss) wrap.innerHTML='<span>'+Battle.enemyDef.name+' <b>'+Math.max(0,Battle.enemyHp)+'/'+Battle.enemyMaxHp+'</b></span>';
+  else wrap.textContent='';
+  renderHud(G);
+}
+function chooseMenu(idx){
+  Audio2.SFX.select();
+  if(idx===0) doFight();
+  else if(idx===1) openActList();
+  else if(idx===2) openItemList();
+  else openMercy();
+}
+function doFight(){
+  const def=Battle.enemyDef;
+  const raw = G.atk*(0.82+Math.random()*0.4) - def.def*0.7;
+  const dmg = Math.max(1, Math.round(raw));
+  Battle.enemyHp = Math.max(0, Battle.enemyHp-dmg);
+  Battle.enemyHurtT=0.4;
+  Audio2.SFX.hit();
+  updateBattleStatsUI();
+  hideAllBattleMenus();
+  if(Battle.enemyHp<=0){
+    setBattleMsg(def.name+' stops moving.');
+    Battle.phase='victory_msg';
+  } else {
+    setBattleMsg('You strike '+def.name+'. '+dmg+' damage.');
+    Battle.phase='msg_then_enemy';
+  }
+}
+function openActList(){
+  Battle.phase='act'; Battle.subIndex=0;
+  Battle._actItems=[{label:'Check', result:Battle.enemyDef.checkText}].concat(Battle.enemyDef.acts);
+  renderSubList(Battle._actItems.map(function(a){ return {label:a.label}; }));
+}
+function openItemList(){
+  Battle.phase='item'; Battle.subIndex=0;
+  const heals = G.inventory.filter(function(e){ return ITEMS[e.id] && ITEMS[e.id].heal>0; });
+  Battle._itemEntries=heals;
+  if(heals.length===0){
+    hideAllBattleMenus();
+    setBattleMsg('No usable items.');
+    Battle.phase='msg_then_backmenu';
+    return;
+  }
+  renderSubList(heals.map(function(e){ return {label:ITEMS[e.id].name, hp:'x'+e.count}; }));
+}
+function openMercy(){
+  const def=Battle.enemyDef;
+  if(def.unspareable && def.noFlee){
+    hideAllBattleMenus();
+    setBattleMsg(def.mercyText || "There's no mercy to be found here.");
+    Battle.phase='msg_then_enemy';
+    return;
+  }
+  const opts=[];
+  if(!def.unspareable) opts.push('spare');
+  if(!def.noFlee) opts.push('flee');
+  Battle._mercyOptions=opts;
+  Battle.phase='mercy_menu'; Battle.subIndex=0;
+  renderSubList(opts.map(function(o){ return {label:o==='spare'?'Spare':'Flee'}; }));
+}
+function chooseSubItem(i){
+  Audio2.SFX.select();
+  if(Battle.phase==='act'){
+    const act=Battle._actItems[i];
+    if(act.setsFlag) Battle.bflags[act.setsFlag]=true;
+    hideAllBattleMenus();
+    setBattleMsg(act.result);
+    Battle.phase='msg_then_enemy';
+  } else if(Battle.phase==='item'){
+    const entry=Battle._itemEntries[i];
+    if(!entry){ Battle.phase='menu'; renderBattleMenu(); return; }
+    const itemDef=ITEMS[entry.id];
+    const healAmt=Math.min(itemDef.heal, G.maxHp-G.hp);
+    G.hp=Math.min(G.maxHp, G.hp+itemDef.heal);
+    removeItem(G, entry.id, 1);
+    Audio2.SFX.heal();
+    updateBattleStatsUI();
+    hideAllBattleMenus();
+    setBattleMsg('You use the '+itemDef.name+'. +'+healAmt+' HP.');
+    Battle.phase='msg_then_enemy';
+  } else if(Battle.phase==='mercy_menu'){
+    const choice=Battle._mercyOptions[i];
+    hideAllBattleMenus();
+    if(choice==='spare'){
+      if(checkSpareable()){
+        setBattleMsg('You spare '+Battle.enemyDef.name+'.');
+        Audio2.SFX.spare();
+        Battle.phase='spare_msg';
+      } else {
+        setBattleMsg(Battle.enemyDef.spareHint || 'Not yet.');
+        Battle.phase='msg_then_enemy';
+      }
+    } else {
+      setBattleMsg('You slip away.');
+      Battle.phase='flee_msg';
+    }
+  }
+}
+function advanceAfterMessage(){
+  Audio2.SFX.confirm();
+  if(Battle.phase==='victory_msg'){
+    const wasHollowBloom = Battle.enemyId==='hollow_bloom';
+    resolveBattleOutcome(G, Battle.enemyDef, Battle.enemyUid, 'killed');
+    endBattle();
+    if(wasHollowBloom) showEnding(G);
+  } else if(Battle.phase==='spare_msg'){
+    resolveBattleOutcome(G, Battle.enemyDef, Battle.enemyUid, 'spared');
+    endBattle();
+  } else if(Battle.phase==='flee_msg'){
+    resolveBattleOutcome(G, Battle.enemyDef, Battle.enemyUid, 'fled');
+    endBattle();
+  } else if(Battle.phase==='defeat_msg'){
+    G.hp = Math.max(6, Math.floor(G.maxHp*0.5));
+    endBattle();
+  } else if(Battle.phase==='msg_then_backmenu'){
+    Battle.phase='menu'; renderBattleMenu();
+  } else if(Battle.phase==='msg_then_enemy'){
+    startEnemyAttack();
+  }
+}
+function startEnemyAttack(){
+  hideAllBattleMenus();
+  setBattleMsg(Battle.enemyDef.name+' attacks!');
+  Battle.phase='enemy_attack';
+  Battle.attackT=0;
+  Battle.attackDuration = Battle.enemyDef.boss?4.4:2.5;
+  Battle.patternState={};
+  Battle.heart.x=Battle.box.x+Battle.box.w/2;
+  Battle.heart.y=Battle.box.y+Battle.box.h/2;
+}
+function updateEnemyAttack(dt){
+  Battle.attackT+=dt;
+  let dx=0,dy=0;
+  if(Input.held.left) dx-=1; if(Input.held.right) dx+=1;
+  if(Input.held.up) dy-=1; if(Input.held.down) dy+=1;
+  if(dx||dy){ const len=Math.sqrt(dx*dx+dy*dy); dx/=len; dy/=len; Battle.heart.x+=dx*95*dt; Battle.heart.y+=dy*95*dt; }
+  const b=Battle.box;
+  Battle.heart.x=clamp(Battle.heart.x,b.x+4,b.x+b.w-4);
+  Battle.heart.y=clamp(Battle.heart.y,b.y+4,b.y+b.h-4);
+  Battle.enemyDef.pattern(Battle, Battle.attackT, dt);
+  for(let i=Battle.bullets.length-1;i>=0;i--){
+    const bl=Battle.bullets[i];
+    if(bl.home){
+      const ang=Math.atan2(Battle.heart.y-bl.y, Battle.heart.x-bl.x);
+      bl.vx=Math.cos(ang)*bl.speed; bl.vy=Math.sin(ang)*bl.speed;
+    }
+    bl.x+=bl.vx*dt; bl.y+=bl.vy*dt;
+    let remove=false;
+    if(bl.life!==undefined){
+      bl.life-=dt;
+      if(bl.splitAt!==undefined && !bl.splitDone && bl.life<=bl.splitAt){
+        bl.splitDone=true;
+        const ang0=Math.atan2(bl.vy,bl.vx)||0;
+        Battle.bullets.push({x:bl.x,y:bl.y,vx:Math.cos(ang0+0.7)*45,vy:Math.sin(ang0+0.7)*45,r:3,color:bl.color,dmg:bl.dmg,life:0.9});
+        Battle.bullets.push({x:bl.x,y:bl.y,vx:Math.cos(ang0-0.7)*45,vy:Math.sin(ang0-0.7)*45,r:3,color:bl.color,dmg:bl.dmg,life:0.9});
+      }
+      if(bl.life<=0) remove=true;
+    } else {
+      if(bl.x<b.x-50||bl.x>b.x+b.w+50||bl.y<b.y-50||bl.y>b.y+b.h+50) remove=true;
+    }
+    if(!remove && Battle.hurtT<=0){
+      let hit=false;
+      if(bl.shape==='bar') hit=circleRect(Battle.heart.x,Battle.heart.y,2.5, bl.x-bl.w/2,bl.y-bl.h/2,bl.w,bl.h);
+      else hit = dist(Battle.heart.x,Battle.heart.y,bl.x,bl.y) < (bl.r+2.5);
+      if(hit){
+        const dmg=Math.max(1, Math.round((bl.dmg||Battle.enemyDef.atk) - G.def*0.45));
+        G.hp=Math.max(0,G.hp-dmg);
+        Battle.hurtT=0.9;
+        Audio2.SFX.hurt();
+        updateBattleStatsUI();
+      }
+    }
+    if(remove) Battle.bullets.splice(i,1);
+  }
+  if(G.hp<=0){
+    Battle.bullets=[];
+    setBattleMsg('Your spark gutters low. The Hollow pulls you back before it goes out.');
+    Battle.phase='defeat_msg';
+    return;
+  }
+  if(Battle.attackT>=Battle.attackDuration){
+    Battle.bullets=[];
+    Battle.phase='menu';
+    setBattleMsg('');
+    renderBattleMenu();
+  }
+}
+function endBattle(){
+  Battle.active=false;
+  document.getElementById('battle-ui').classList.add('hidden');
+  layoutGame();
+  renderHud(G);
+  if(G.hp<=0) G.hp=1;
+  if(Battle.onResolve){ const fn=Battle.onResolve; Battle.onResolve=null; fn(G); }
+}
+Battle.update = function(dt){
+  if(!Battle.active) return;
+  if(Battle.hurtT>0) Battle.hurtT=Math.max(0,Battle.hurtT-dt);
+  if(Battle.enemyHurtT>0) Battle.enemyHurtT=Math.max(0,Battle.enemyHurtT-dt);
+  if(Battle.phase==='menu'){
+    if(Input.consume('navLeft')){ Battle.menuIndex=(Battle.menuIndex+3)%4; renderBattleMenu(); Audio2.SFX.menuMove(); }
+    if(Input.consume('navRight')){ Battle.menuIndex=(Battle.menuIndex+1)%4; renderBattleMenu(); Audio2.SFX.menuMove(); }
+    if(Input.consume('confirm')){ chooseMenu(Battle.menuIndex); }
+  } else if(Battle.phase==='act'||Battle.phase==='item'||Battle.phase==='mercy_menu'){
+    const list=Battle._subListRef||[];
+    if(list.length>0){
+      if(Input.consume('navDown')){ Battle.subIndex=(Battle.subIndex+1)%list.length; renderSubListSelection(); Audio2.SFX.menuMove(); }
+      if(Input.consume('navUp')){ Battle.subIndex=(Battle.subIndex-1+list.length)%list.length; renderSubListSelection(); Audio2.SFX.menuMove(); }
+    }
+    if(Input.consume('cancel')){ Audio2.SFX.cancel(); Battle.phase='menu'; renderBattleMenu(); }
+    if(Input.consume('confirm')){ chooseSubItem(Battle.subIndex); }
+  } else if(Battle.phase==='msg_then_enemy'||Battle.phase==='victory_msg'||Battle.phase==='spare_msg'||Battle.phase==='defeat_msg'||Battle.phase==='flee_msg'||Battle.phase==='msg_then_backmenu'){
+    if(Input.consume('confirm')) advanceAfterMessage();
+  } else if(Battle.phase==='enemy_attack'){
+    updateEnemyAttack(dt);
+  }
+};
+function renderBattleCanvas(ctx){
+  ctx.fillStyle='#07050c'; ctx.fillRect(0,0,480,270);
+  const def=Battle.enemyDef;
+  if(def) def.sprite(ctx,240,95,(G&&G._animT)||0, Battle.enemyHurtT);
+  const b=Battle.box;
+  ctx.strokeStyle='#e9e4f0'; ctx.lineWidth=2;
+  ctx.strokeRect(b.x+1,b.y+1,b.w-2,b.h-2);
+  if(Battle.phase==='enemy_attack'){
+    Battle.bullets.forEach(function(bl){
+      if(bl.shape==='bar') px(ctx, bl.x-bl.w/2, bl.y-bl.h/2, bl.w, bl.h, bl.color);
+      else pxCircle(ctx, bl.x, bl.y, bl.r, bl.color);
+    });
+    const flashOff = Battle.hurtT>0 && Math.floor(Battle.hurtT*16)%2===0;
+    drawHeart(ctx, Battle.heart.x, Battle.heart.y, 2, flashOff?'#ffffff':'#e8536b');
+  }
+}
+function renderHud(state){
+  if(!state) return;
+  document.getElementById('hud-name').textContent=state.playerName;
+  document.getElementById('hud-hptext').textContent=state.hp+'/'+state.maxHp;
+  document.getElementById('hud-hpfill').style.width=Math.max(0,(state.hp/state.maxHp*100))+'%';
+}
+
+/* ============================================================
+   §ENDINGS
+   ============================================================ */
+function enterSpireChamber(state){
+  if(state.flags.finaleStarted) return;
+  state.flags.finaleStarted=true;
+  const ending = computeEnding(state);
+  state.flags.finaleRoute = ending;
+  if(ending==='genocide'){
+    Audio2.startMusic('area5_dark');
+    runDialogueScript('Nettle','nettle', [
+      L('Nettle',"..."),
+      L('Nettle',"There's nothing left to show you. You already know what this place looks like empty. You made it that way."),
+      L('Nettle',"So let's stop pretending this was ever a conversation."),
+      BATTLE('hollow_bloom')
+    ]);
+  } else if(ending==='pacifist'){
+    Audio2.startMusic('area5_warm');
+    const known = state.flags.knowsWrenName;
+    const lines=[
+      L('Nettle',"This is the top. The Lumen. Smaller than the stories make it sound, isn't it."),
+      L('Nettle',"I've sat up here a long time, deciding what everyone who reached this point deserved. I was good at it. I'm less sure now it was ever my decision to make.")
+    ];
+    if(known){
+      lines.push(CH([{id:'wren',label:'"...Wren?"'},{id:'nothing',label:'Say nothing'}], function(id){
+        if(id==='wren') return [ L('Nettle',"..."), L('Nettle',"Nobody's used that in a long time. Not even me."), L('Nettle',"I think I'd like to try being her again. Slowly. If that's allowed.") ];
+        return [ L('Nettle',"You're kind. You don't have to be clever too.") ];
+      }));
+    }
+    lines.push(
+      L('Nettle',"I'm tired of watching from a flowerpot. I think I'd like to come down. Properly. See who's left. Say the things I never let myself say."),
+      L('Nettle',"The Lumen isn't fixed. It's just not alone anymore, holding everything up. Maybe that's enough, for now."),
+      FN(function(s){ Audio2.SFX.levelUp(); }),
+      FN(function(s){ showEnding(s); })
+    );
+    runDialogueScript('Nettle','nettle', lines);
+  } else {
+    Audio2.startMusic('area5_warm');
+    runDialogueScript('Nettle','nettle', [
+      L('Nettle',"The top, at last. Mixed feelings, I'd guess, if you've felt anything consistent this whole way down."),
+      L('Nettle',"You spared what you could and took what you needed to. That's most people. I used to find that disappointing."),
+      L('Nettle',"I don't, really, anymore. It's just true."),
+      FN(function(s){ showEnding(s); })
+    ]);
+  }
+}
+function nameOrFallback(flagVal, aliveText, goneText){
+  return flagVal==='killed' ? goneText : aliveText;
+}
+function buildNeutralSummary(state){
+  const f=state.flags;
+  const lines=[];
+  lines.push(nameOrFallback(f.garrowResolved,'Garrow still keeps the gate at Driftwood Hold, a little less alone than before.','The gate at Driftwood Hold stands open now. Nobody guards it anymore.'));
+  lines.push(nameOrFallback(f.raskResolved,'Rask still trains the Hold\'s youth, and tells them, sometimes, that you were the exception to her rule.','The training yard at Glasswick is quiet. Nobody spars there now.'));
+  lines.push(nameOrFallback(f.moteResolved,'Mote still watches the Root, glowing a little brighter these days.','A little light went out at the Root, and the Hollow is dimmer for it.'));
+  lines.push(nameOrFallback(f.jibbResolved,'Jibb is still doing the same terrible bit to the same empty seats, and somehow that\'s a comfort.','The stage at Glasswick stays dark. Nobody fixed the lights.'));
+  lines.push(nameOrFallback(f.hesperResolved,'Hesper is still in her lab, trying to undo what was never hers alone to fix.','Hush Labs sits empty now, the door swinging in a draft that shouldn\'t exist underground.'));
+  return lines.join('\n');
+}
+function showEnding(state){
+  state.stats.finalKills = state.stats.kills;
+  state.stats.finalSpares = state.stats.spares;
+  SaveMgr.clearSave();
+  const route = state.flags.finaleRoute || computeEnding(state);
+  let title, body;
+  if(route==='pacifist'){
+    title='— A QUIET LIGHT —';
+    body = "You climbed all the way down into a world full of reasons to be afraid, and you chose, over and over, not to be the thing anyone down here had to fear.\n\n"
+      +"Nettle comes down from the Spire. Garrow opens the gate for good. Rask still trains her students to fight, but tells them, now, that strength and gentleness were never actually opposites. Jibb's jokes are still bad. Hesper keeps working, lighter for not working alone.\n\n"
+      +"The Hollow doesn't stop being hard, or hungry, or occasionally cruel. But it remembers, now, that it doesn't have to be only that.\n\n"
+      +"Mercy didn't fix everything. It never does, in one trip. But it broke something that had been running in a circle for a very long time — and that's not nothing. That might be everything.\n\n"
+      +"You, "+(state.playerName)+", climb back out through the crack in Mount Solace, into ordinary daylight, carrying a world you chose not to end.\n\n"
+      +"THE END — PACIFIST";
+  } else if(route==='genocide'){
+    title='— WHAT YOU WON —';
+    body = "The Hollow is silent now. Not peaceful — silent the way a room is silent after everyone in it has left, or been made to.\n\n"
+      +"You are, technically, stronger than when you fell. Your strikes land harder. Nothing stands between you and the surface anymore.\n\n"
+      +"But think, for a moment, about what filled this place before you got here: a guardian waiting on a gate for a child who was never coming back. A comedian still working on an ending to a joke he'd had since before you arrived. A moth who believed, stubbornly, that things could get better, right up until she didn't get the chance to see it. A scientist trying to undo a harm that was never only hers. A warrior who thought mercy got people killed, and who you proved almost right.\n\n"
+      +"None of them were obstacles. They were the entire reason this journey could have meant anything at all. You won every fight. You did not win anything else.\n\n"
+      +"Nettle — what's left of her — doesn't watch you leave. There's nothing left in her to watch with.\n\n"
+      +"You climb back out through the crack in Mount Solace. The light up there looks the same as it always did. It shouldn't.\n\n"
+      +"THE END — GENOCIDE";
+  } else {
+    title='— WHAT YOU CARRY —';
+    body = "You leave the Hollow the way most people leave most places: having done some good, some harm, and a great deal that was simply necessary at the time.\n\n"
+      + buildNeutralSummary(state) + "\n\n"
+      +"Nobody down here will tell a single clean story about you. You were kind when it cost you little, and hard when it felt like it had to be. That's not a verdict. It's just what happened.\n\n"
+      +"You, "+(state.playerName)+", climb back out through the crack in Mount Solace, carrying a world that is, on balance, still standing — mostly because of you, and a little bit in spite of you.\n\n"
+      +"THE END";
+  }
+  document.getElementById('ending-title').textContent=title;
+  document.getElementById('ending-body').textContent=body;
+  document.getElementById('ending-screen').classList.remove('hidden');
+  UIMode.set('ending');
+}
+
+/* ============================================================
+   §UI-SCREENS
+   ============================================================ */
+const Settings = { musicVol:0.55, sfxVol:0.70, muted:false, textSpeed:2 };
+const UIMode = { current:'title', previous:null, set:function(m){ this.previous=this.current; this.current=m; } };
+let _navState = { _titleIdx:0, _pauseIdx:0 };
+let _confirmResolve=null;
+let _settingsReturnTo='title';
+
+function layoutGame(){
+  const wrap=document.getElementById('canvas-wrap');
+  const dock=document.getElementById('bottom-dock');
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const availW=Math.max(200,vw-10), availH=Math.max(200,vh-10);
+  const dockH = dock.offsetHeight||0;
+  const canvasAvailH = Math.max(80, availH-dockH);
+  let scale = Math.min(availW/480, canvasAvailH/270);
+  scale = clamp(scale, 0.4, 3);
+  const cw=Math.floor(480*scale), ch=Math.floor(270*scale);
+  wrap.style.width=cw+'px'; wrap.style.height=ch+'px';
+  dock.style.width=cw+'px';
+}
+function showTitleScreen(){
+  UIMode.set('title');
+  document.getElementById('title-screen').classList.remove('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('dialogue-box').classList.add('hidden');
+  document.getElementById('battle-ui').classList.add('hidden');
+  document.getElementById('ending-screen').classList.add('hidden');
+  document.getElementById('btn-continue').disabled = !SaveMgr.hasSave();
+  layoutGame();
+  Audio2.startMusic('title');
+}
+function startNewGame(){
+  let name='Wanderer';
+  try{
+    const r = window.prompt('What should we call you? (leave blank for "Wanderer")','');
+    if(r && r.trim()) name = r.trim().slice(0,16);
+  }catch(e){}
+  G = newGameState(name);
+  document.getElementById('title-screen').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  UIMode.set('overworld');
+  layoutGame();
+  renderHud(G);
+  updateAreaMusic(G);
+}
+function continueGame(){
+  const data = SaveMgr.load();
+  if(!data) return;
+  G = data;
+  G._moving=false; G._animT=G._animT||0;
+  G.flags = G.flags||{};
+  G.stats = G.stats||{kills:0,spares:0,fled:0};
+  G.inventory = G.inventory||[];
+  document.getElementById('title-screen').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  UIMode.set('overworld');
+  layoutGame();
+  renderHud(G);
+  updateAreaMusic(G);
+}
+function openPause(){
+  UIMode.set('paused');
+  document.getElementById('pause-menu').classList.remove('hidden');
+  Audio2.SFX.select();
+}
+function closePause(){
+  document.getElementById('pause-menu').classList.add('hidden');
+  UIMode.set('overworld');
+  Audio2.SFX.cancel();
+}
+function openSettings(fromMode){
+  _settingsReturnTo = fromMode;
+  document.getElementById('settings-menu').classList.remove('hidden');
+  document.getElementById('pause-menu').classList.add('hidden');
+  document.getElementById('title-screen').classList.add('hidden');
+  UIMode.set('settings');
+}
+function closeSettings(){
+  document.getElementById('settings-menu').classList.add('hidden');
+  if(_settingsReturnTo==='paused'){ document.getElementById('pause-menu').classList.remove('hidden'); UIMode.set('paused'); }
+  else { document.getElementById('title-screen').classList.remove('hidden'); UIMode.set('title'); }
+  Audio2.SFX.cancel();
+}
+function openInventory(){
+  if(!G) return;
+  renderInventoryList();
+  document.getElementById('inventory-menu').classList.remove('hidden');
+  UIMode.set('inventory');
+  Audio2.SFX.select();
+}
+function closeInventory(){
+  document.getElementById('inventory-menu').classList.add('hidden');
+  UIMode.set('overworld');
+  Audio2.SFX.cancel();
+}
+function renderInventoryList(){
+  const wrap=document.getElementById('inv-list');
+  wrap.innerHTML='';
+  const empty=document.getElementById('inv-empty-msg');
+  if(!G || G.inventory.length===0){ empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  G.inventory.forEach(function(entry){
+    const def=ITEMS[entry.id];
+    if(!def) return;
+    const row=document.createElement('div');
+    row.className='modal-row';
+    row.innerHTML = '<label style="flex:2;color:var(--text);">'+def.name+' x'+entry.count+'<br><span style="font-size:11px;color:var(--text-dim);">'+def.desc+'</span></label>';
+    if(def.heal>0){
+      const btn=document.createElement('button');
+      btn.className='modal-btn primary'; btn.style.flex='0 0 auto'; btn.textContent='Use';
+      btn.addEventListener('click', function(){
+        G.hp=Math.min(G.maxHp,G.hp+def.heal);
+        removeItem(G,entry.id,1);
+        Audio2.SFX.heal();
+        renderHud(G);
+        renderInventoryList();
+      });
+      row.appendChild(btn);
+    }
+    wrap.appendChild(row);
+  });
+}
+function askConfirm(title,body,onYes){
+  document.getElementById('confirm-title').textContent=title;
+  document.getElementById('confirm-body').textContent=body;
+  document.getElementById('confirm-dialog').classList.remove('hidden');
+  _confirmResolve=onYes;
+}
+function closeConfirm(){
+  document.getElementById('confirm-dialog').classList.add('hidden');
+  _confirmResolve=null;
+}
+function persistSettings(){ SaveMgr.saveSettings(Settings); }
+function loadSettingsIntoUI(){
+  const s=SaveMgr.loadSettings();
+  if(s){
+    Settings.musicVol = (s.musicVol!=null)?s.musicVol:Settings.musicVol;
+    Settings.sfxVol = (s.sfxVol!=null)?s.sfxVol:Settings.sfxVol;
+    Settings.muted = !!s.muted;
+    Settings.textSpeed = s.textSpeed||2;
+  }
+  document.getElementById('vol-music').value=Math.round(Settings.musicVol*100);
+  document.getElementById('vol-sfx').value=Math.round(Settings.sfxVol*100);
+  document.getElementById('txt-speed').value=Settings.textSpeed;
+  document.getElementById('btn-mute-toggle').textContent=Settings.muted?'ON':'OFF';
+  document.getElementById('btn-mute-toggle').classList.toggle('on',Settings.muted);
+  Audio2.setMusicVol(Settings.musicVol);
+  Audio2.setSfxVol(Settings.sfxVol);
+  Audio2.setMuted(Settings.muted);
+}
+function updateBtnListNav(btns,key){
+  if(btns.length===0) return;
+  if(_navState[key]>=btns.length) _navState[key]=0;
+  btns.forEach(function(b,i){ b.classList.toggle('kbd-sel', i===_navState[key]); });
+  if(Input.consume('navDown')){ _navState[key]=(_navState[key]+1)%btns.length; Audio2.SFX.menuMove(); }
+  if(Input.consume('navUp')){ _navState[key]=(_navState[key]-1+btns.length)%btns.length; Audio2.SFX.menuMove(); }
+  if(Input.consume('confirm')){ btns[_navState[key]].click(); }
+}
+function updateTitleNav(){
+  const btns = Array.prototype.filter.call(document.querySelectorAll('#title-screen .title-btn'), function(b){ return !b.disabled; });
+  updateBtnListNav(btns,'_titleIdx');
+}
+function updatePauseNav(){
+  const btns = Array.prototype.slice.call(document.querySelectorAll('#pause-menu .modal-btn'));
+  updateBtnListNav(btns,'_pauseIdx');
+}
+function initUI(){
+  document.getElementById('btn-newgame').addEventListener('click', startNewGame);
+  document.getElementById('btn-continue').addEventListener('click', continueGame);
+  document.getElementById('btn-settings').addEventListener('click', function(){ openSettings('title'); });
+
+  document.getElementById('btn-resume').addEventListener('click', closePause);
+  document.getElementById('btn-save').addEventListener('click', function(){ if(G){ SaveMgr.save(G); Audio2.SFX.save(); } });
+  document.getElementById('btn-pause-settings').addEventListener('click', function(){ openSettings('paused'); });
+  document.getElementById('btn-quit-title').addEventListener('click', function(){
+    askConfirm('RETURN TO TITLE?','Unsaved progress since your last save will be lost.', function(){
+      closeConfirm();
+      document.getElementById('pause-menu').classList.add('hidden');
+      Battle.active=false; document.getElementById('battle-ui').classList.add('hidden');
+      DialogueBox.active=false; document.getElementById('dialogue-box').classList.add('hidden');
+      G=null;
+      showTitleScreen();
+    });
+  });
+
+  document.getElementById('btn-settings-close').addEventListener('click', closeSettings);
+  document.getElementById('vol-music').addEventListener('input', function(e){ Settings.musicVol=e.target.value/100; Audio2.setMusicVol(Settings.musicVol); persistSettings(); });
+  document.getElementById('vol-sfx').addEventListener('input', function(e){ Settings.sfxVol=e.target.value/100; Audio2.setSfxVol(Settings.sfxVol); persistSettings(); });
+  document.getElementById('txt-speed').addEventListener('input', function(e){ Settings.textSpeed=parseInt(e.target.value,10); persistSettings(); });
+  document.getElementById('btn-mute-toggle').addEventListener('click', function(e){
+    Settings.muted=!Settings.muted;
+    Audio2.setMuted(Settings.muted);
+    e.target.textContent=Settings.muted?'ON':'OFF';
+    e.target.classList.toggle('on',Settings.muted);
+    persistSettings();
+  });
+
+  document.getElementById('hud-inv-btn').addEventListener('click', openInventory);
+  document.getElementById('btn-inv-close').addEventListener('click', closeInventory);
+
+  document.getElementById('btn-confirm-yes').addEventListener('click', function(){ if(_confirmResolve) _confirmResolve(); });
+  document.getElementById('btn-confirm-no').addEventListener('click', closeConfirm);
+
+  document.getElementById('btn-ending-title').addEventListener('click', function(){
+    document.getElementById('ending-screen').classList.add('hidden');
+    G=null;
+    showTitleScreen();
+  });
+
+  document.querySelectorAll('.battle-menu-btn').forEach(function(btn,i){
+    btn.addEventListener('click', function(){ if(Battle.active && Battle.phase==='menu'){ Battle.menuIndex=i; chooseMenu(i); } });
+  });
+
+  document.getElementById('dialogue-box').addEventListener('pointerdown', function(e){
+    if(e.target.closest('.dlg-choice-btn')) return;
+    if(DialogueBox.active) Input.fire('confirm');
+  });
+
+  window.addEventListener('resize', layoutGame);
+  window.addEventListener('orientationchange', function(){ setTimeout(layoutGame,250); });
+}
+
+/* ============================================================
+   §LOOP
+   ============================================================ */
+let _lastT=0;
+function gameLoop(ts){
+  const dt = Math.min(0.05, (ts-_lastT)/1000 || 0.016);
+  _lastT = ts;
+  const canvas = document.getElementById('game-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+
+  if(Input.consume('menu')){
+    if(UIMode.current==='overworld' && !DialogueBox.active && !Battle.active) openPause();
+    else if(UIMode.current==='paused') closePause();
+  }
+  if(UIMode.current==='settings' && Input.consume('cancel')) closeSettings();
+  if(UIMode.current==='inventory' && Input.consume('cancel')) closeInventory();
+  if(UIMode.current==='paused' && Input.consume('cancel')) closePause();
+
+  if(UIMode.current==='title'){
+    updateTitleNav();
+    ctx.fillStyle='#050308'; ctx.fillRect(0,0,480,270);
+  } else if(UIMode.current==='paused'){
+    updatePauseNav();
+  } else if(UIMode.current==='overworld'){
+    if(Battle.active){
+      if(G) G._animT=(G._animT||0)+dt;
+      Battle.update(dt);
+      renderBattleCanvas(ctx);
+    } else if(DialogueBox.active){
+      if(G) G._animT=(G._animT||0)+dt;
+      DialogueBox.update(dt);
+      if(G) renderOverworld(ctx,G);
+    } else if(G){
+      updateOverworld(dt);
+      renderOverworld(ctx,G);
+    }
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+/* ============================================================
+   §BOOT
+   ============================================================ */
+function boot(){
+  TOTAL_REGULAR_ENEMIES = countTotalRegularEnemies();
+  Input.init();
+  initUI();
+  loadSettingsIntoUI();
+  const bm=document.getElementById('boot-msg');
+  if(bm) bm.classList.add('hidden');
+  showTitleScreen();
+  requestAnimationFrame(gameLoop);
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}
+</script>
+</body>
+</html>
